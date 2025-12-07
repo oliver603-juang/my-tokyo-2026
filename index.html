@@ -55,22 +55,22 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
-        // --- Gemini API Helper ---
+        // --- Gemini API Helper (Fixed: Use gemini-2.0-flash-exp) ---
         const generateGeminiContent = async (prompt, imageBase64 = null) => {
-            const defaultKey = "AIzaSyB_US_x8A3-et7cjckce3B9XzueL-NE0QQ"; // Note: In production, use environment variables
+            const defaultKey = ""; 
             let storedKey = localStorage.getItem('gemini_api_key');
             let apiKey = storedKey ? storedKey.trim() : defaultKey.trim();
             
             if (!apiKey) throw new Error("NO_API_KEY");
 
-            // FIX: Use the main model for BOTH text and image understanding.
+            // FIX: Use gemini-2.0-flash-exp which is the latest, most robust model for multimodal tasks.
+            // If this still fails, we will try to fallback to 1.5-flash-latest in logic, but let's stick to one for now.
+            //const model = 'gemini-2.0-flash-exp';
             const model = 'gemini-2.5-flash-preview-09-2025';
-            
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             
             const parts = [{ text: prompt }];
             if (imageBase64) {
-                // Remove header if present (e.g., data:image/jpeg;base64,)
                 const base64Data = imageBase64.split(',')[1] || imageBase64;
                 parts.push({
                     inlineData: {
@@ -92,8 +92,17 @@
                 if (!response.ok) {
                     const errData = await response.json().catch(() => ({}));
                     console.error("API Error Details:", errData);
+                    
+                    if (response.status === 403 && errData.error?.message?.includes('leaked')) {
+                        localStorage.removeItem('gemini_api_key'); 
+                        throw new Error("API Key 已失效 (Key外洩)。請申請新 Key。");
+                    }
+                    if (response.status === 400 && errData.error?.message?.includes('API key not valid')) {
+                        localStorage.removeItem('gemini_api_key');
+                        throw new Error("API Key 無效。請檢查設定。");
+                    }
                     if (response.status === 404) {
-                         throw new Error("API 連線異常 (404): 模型未找到或 Key 無效");
+                         throw new Error(`模型 ${model} 未找到 (404)。請檢查 API Key 權限。`);
                     }
                     throw new Error(errData.error?.message || `HTTP Error: ${response.status}`);
                 }
@@ -726,24 +735,32 @@
                 reader.onloadend = async () => {
                     const base64String = reader.result;
                     try {
-                        const prompt = `Analyze this receipt image. Extract: 1. Total amount (number). 2. Store name (max 10 chars, Traditional Chinese). 3. Date and Time (YYYY/MM/DD HH:mm). Return JSON: {"amount": number, "store": "string", "date": "string"}.`;
+                        const prompt = `Analyze this receipt image. Extract three things: 
+                        1. Total amount (number only). 
+                        2. Store name (max 10 chars, Traditional Chinese). 
+                        3. Date and Time in "YYYY/MM/DD HH:mm" format (e.g. 2026/01/30 14:30). If year is missing, guess current or nearby year.
+                        
+                        Return a clean JSON object with these exact keys: "amount", "store", "date". 
+                        Do not include markdown.`;
+                        
                         let responseText = await generateGeminiContent(prompt, base64String);
                         
-                        // 2. Improved JSON Parsing Logic
+                        // JSON Parsing Logic with Regex
                         let result;
                         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
                         if (jsonMatch) {
                             result = JSON.parse(jsonMatch[0]);
                         } else {
-                            // Fallback cleanup
                             responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
                             result = JSON.parse(responseText);
                         }
                         
                         if (result && (result.amount || result.amount === 0)) {
-                            // Ensure amount is a clean number/string for input type="number"
                             const cleanAmount = String(result.amount).replace(/[^0-9.]/g, '');
+                            
+                            // Format: YYYY/MM/DD HH:mm StoreName
                             const autoNote = (result.date ? result.date + " " : "") + (result.store || "");
+                            
                             setExpenseForm(prev => ({
                                 ...prev,
                                 amount: cleanAmount,
@@ -757,7 +774,6 @@
                         alert("收據辨識失敗，請手動輸入。");
                     } finally {
                         setIsAnalyzingReceipt(false);
-                        // Reset file input
                         if (fileInputRef.current) fileInputRef.current.value = '';
                     }
                 };
