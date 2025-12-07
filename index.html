@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2026 東京冬旅手帳 | Tokyo Winter Trip (Auto Tickets)</title>
+    
+    <!-- 引入 React 與 Tailwind -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #0B1121; /* Deep Night Blue */
+            color: #E2E8F0; 
+            /* Starry background effect */
+            background-image: 
+                radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 3px),
+                radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 2px),
+                radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 3px);
+            background-size: 550px 550px, 350px 350px, 250px 250px;
+            background-position: 0 0, 40px 60px, 130px 270px;
+            background-attachment: fixed;
+        }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        /* Loading Animation */
+        .typing-indicator span { animation: blink 1.4s infinite both; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes blink { 0% { opacity: 0.2; } 20% { opacity: 1; } 100% { opacity: 0.2; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+        // --- Gemini API Helper ---
+        const generateGeminiContent = async (prompt, imageBase64 = null) => {
+            const defaultKey = "AIzaSyB_US_x8A3-et7cjckce3B9XzueL-NE0QQ"; // Note: In production, use environment variables
+            let storedKey = localStorage.getItem('gemini_api_key');
+            let apiKey = storedKey ? storedKey.trim() : defaultKey.trim();
+            
+            if (!apiKey) throw new Error("NO_API_KEY");
+
+            // FIX: Use the main model for BOTH text and image understanding.
+            const model = 'gemini-2.5-flash-preview-09-2025';
+            
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            
+            const parts = [{ text: prompt }];
+            if (imageBase64) {
+                // Remove header if present (e.g., data:image/jpeg;base64,)
+                const base64Data = imageBase64.split(',')[1] || imageBase64;
+                parts.push({
+                    inlineData: {
+                        mimeType: "image/jpeg",
+                        data: base64Data
+                    }
+                });
+            }
+
+            const payload = { contents: [{ parts: parts }] };
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("API Error Details:", errData);
+                    if (response.status === 404) {
+                         throw new Error("API 連線異常 (404): 模型未找到或 Key 無效");
+                    }
+                    throw new Error(errData.error?.message || `HTTP Error: ${response.status}`);
+                }
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "抱歉，AI 暫時無法回應。";
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                throw error;
+            }
+        };
+
+        // --- Icons ---
+        const Icons = {
+            Plane: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M2 12h5"/><path d="M13 12h3"/><path d="M19.74 7.33a2.3 2.3 0 0 1 2.93 2.93l-3.33 3.33a2.3 2.3 0 0 1-3.25 0l-7.34-7.34a2.3 2.3 0 0 1 0-3.25l3.33-3.33z"/><path d="M14.66 14.66 9 22H2l2.5-9"/><path d="M7 17l-5 5"/></svg>,
+            Smile: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" x2="9.01" y1="9" y2="9"/><line x1="15" x2="15.01" y1="9" y2="9"/></svg>,
+            List: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>,
+            LayoutGrid: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>,
+            Calculator: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></svg>,
+            Clock: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            Wallet: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></svg>,
+            MapPin: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>,
+            Ticket: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>,
+            ExternalLink: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>,
+            Footprints: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 11 3.8 11 8c0 1.25-.38 2-1.28 2.55-.4.25-.72.82-.72 1.25V16a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 2 13 3.8 13 8c0 1.25.38 2 1.28 2.55.4.25.72.82.72 1.25V16a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2z"/></svg>,
+            Car: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H7.7c-.7 0-1.3.3-1.8.7-.9.9-2.2 2.3-2.2 2.3S1 10.6 1 11.1c-.8.2-1.5 1-1.5 1.9v3c0 .6.4 1 1 1h2"/><path d="M2.5 17a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/><path d="M16.5 17a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5Z"/><path d="M12 9V6"/></svg>,
+            Navigation: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>,
+            ArrowRightLeft: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></svg>,
+            Hotel: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><polyline points="7 2 7 20"/><polyline points="17 2 17 20"/><line x1="2" x2="22" y1="12" y2="12"/><line x1="2" x2="22" y1="17" y2="17"/></svg>,
+            Star: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+            X: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>,
+            Coffee: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M10 2v2"/><path d="M14 2v2"/><path d="M6 2v2"/><path d="M18 8a1 1 0 0 1 1 1v2a3 3 0 0 1-3 3h-2.95a1 1 0 0 0-.768.369l-.254.332a4 4 0 0 1-3.26 1.623 4 4 0 0 1-3.296-1.402l-.125-.153A1 1 0 0 0 4.35 14H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h14z"/><path d="M18 14v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-1"/></svg>,
+            ShoppingBag: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>,
+            Fuel: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></svg>,
+            MoreHorizontal: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>,
+            Sun: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>,
+            CloudSnow: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M8 15h.01"/><path d="M8 19h.01"/><path d="M12 17h.01"/><path d="M12 21h.01"/><path d="M16 15h.01"/><path d="M16 19h.01"/></svg>,
+            CloudRain: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6"/><path d="M8 14v6"/><path d="M12 16v6"/></svg>,
+            Cloud: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M17.5 19c0-1.7-1.3-3-3-3h-1.1c-.2-3.4-3.1-6-6.5-6-3.7 0-6.6 2.8-6.9 6.4h-.1C2.1 16.4 0 18.5 0 21c0 2.2 1.8 4 4 4h13.5c2.2 0 4-1.8 4-4"/></svg>,
+            Edit3: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>,
+            Sparkles: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M9 3v4"/><path d="M3 5h4"/><path d="M3 9h4"/></svg>,
+            MessageCircle: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg>,
+            Send: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>,
+            Bot: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>,
+            Settings: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.72l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+            ArrowDown: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>,
+            Map: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6"/><line x1="9" x2="9" y1="3" y2="18"/><line x1="15" x2="15" y1="6" y2="21"/></svg>,
+            Search: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+            Gift: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.9 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></svg>,
+            Store: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>,
+            Utensils: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>,
+            LocateFixed: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg>,
+            Loader2: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
+            AlertTriangle: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>,
+            Camera: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+        };
+
+        // --- Utils ---
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; var dLat = deg2rad(lat2-lat1); var dLon = deg2rad(lon2-lon1);
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); var d = R * c;
+            return d.toFixed(1);
+        }
+        function deg2rad(deg) { return deg * (Math.PI/180) }
+
+        // --- Constants for Location & Nav ---
+        // Added lat/lon coordinates for auto-detection
+        const REGION_DATA = {
+          "narita": { 
+            label: "千葉/成田", 
+            lat: 35.7720, lon: 140.3929,
+            souvenirs: [
+              { name: "花生最中 (Peanut Monaka)", desc: "成田參道名物" },
+              { name: "鐵砲漬 (Teppozuke)", desc: "風味獨特醬菜" },
+              { name: "房總枇杷果凍", desc: "清爽水果甜點" }
+            ],
+            color: "text-[#FFCF56]"
+          },
+          "saitama": { 
+            label: "埼玉/大宮", 
+            lat: 35.9063, lon: 139.6237,
+            souvenirs: [
+              { name: "十萬石饅頭", desc: "埼玉縣民認證" },
+              { name: "草加仙貝", desc: "傳統醬油風味" },
+              { name: "川越依摩戀 (Imokoi)", desc: "紅豆地瓜點心" }
+            ],
+            color: "text-[#90BE6D]"
+          },
+          "yokohama": { 
+            label: "橫濱/神奈川", 
+            lat: 35.4437, lon: 139.6380,
+            souvenirs: [
+              { name: "Ariake Harbour", desc: "經典栗子蛋糕" },
+              { name: "崎陽軒燒賣", desc: "冷掉也好吃" },
+              { name: "紅磚倉庫起司餅", desc: "濃郁伴手禮" }
+            ],
+            color: "text-[#FF9B85]"
+          },
+          "tokyo": { 
+            label: "東京/舞濱", 
+            lat: 35.6329, lon: 139.8804,
+            souvenirs: [
+              { name: "東京香蕉", desc: "經典不敗" },
+              { name: "NewYork Perfect Cheese", desc: "排隊起司脆餅" },
+              { name: "Disney 糖果罐", desc: "園區限定" }
+            ],
+            color: "text-[#4D908E]"
+          }
+        };
+
+        const NAV_BUTTONS = [
+          { label: "Book/Hard Off", query: "hard off OR book off", Icon: Icons.Search, color: "bg-blue-600/20 text-blue-400 border-blue-600/50" },
+          { label: "加油站", query: "gas station", Icon: Icons.Fuel, color: "bg-red-600/20 text-red-400 border-red-600/50" },
+          { label: "超市/熟食", query: "supermarket OR Aeon OR Ito-Yokado OR LIFE OR SEIYU OR Gyomu Super OR OK Store OR Depachika", Icon: Icons.Store, color: "bg-green-600/20 text-green-400 border-green-600/50" },
+          { label: "便利商店", query: "convenience store lawson family mart", Icon: Icons.Utensils, color: "bg-orange-600/20 text-orange-400 border-orange-600/50" }
+        ];
+
+        // --- Data ---
+        const FLIGHT_INFO = {
+            outbound: { flight: "JX802", airline: "星宇航空 STARLUX", from: "TPE (桃園)", to: "NRT (成田)", dep: "10:10", arr: "14:20", date: "1/30 (五)", duration: "3h 10m" },
+            inbound: { flight: "JX801", airline: "星宇航空 STARLUX", from: "NRT (成田)", to: "TPE (桃園)", dep: "15:30", arr: "18:45", date: "2/3 (二)", duration: "4h 15m" }
+        };
+        const HOTEL_INFO = [
+            { day: "1/30", name: "Hotel Torifito Kashiwanoha", location: "千葉柏市", desc: "大浴場質感飯店", link: "https://www.google.com/maps/search/?api=1&query=Hotel+Torifito+Kashiwanoha+Campus", lat: 35.8917, lon: 139.9497 },
+            { day: "1/31", name: "REF大宮 by Vessel Hotels", location: "埼玉大宮", desc: "設計感現代飯店", link: "https://www.google.com/maps/search/?api=1&query=REF+Omiya+by+Vessel+Hotels", lat: 35.9062, lon: 139.6270 },
+            { day: "2/1", name: "HOTEL COMENTO YOKOHAMA", location: "橫濱關內", desc: "近港未來", link: "https://www.google.com/maps/search/?api=1&query=HOTEL+COMENTO+YOKOHAMA+KANNAI", lat: 35.4411, lon: 139.6359 },
+            { day: "2/2", name: "日和飯店舞濱", location: "千葉浦安", desc: "親子友善/近迪士尼", link: "https://www.google.com/maps/search/?api=1&query=Hiyori+Hotel+Maihama", lat: 35.6462, lon: 139.8970 },
+        ];
+        
+        const RENTAL_INFO_LIST = [
+            { label: "予約番号", value: "W7468465" },
+            { label: "受付日時", value: "2025-09-03 15:42:42" },
+            { label: "出発店舗", value: "成田空港第２ビルカウンター TEL：0476-94-5701" },
+            { label: "返却店舗", value: "成田空港第２ビルカウンター TEL：0476-94-5701" },
+            { label: "車のクラス", value: "EAクラス 禁煙 スタッドレス（エコカー・EV）" },
+            { label: "利用日程", value: "2026年1月30日 15:30 ～ 2026年2月3日 12:30" },
+            { label: "乗車人数", value: "大人（6歳以上）4名  子供（6歳未満）0名" },
+            { label: "チャイルドシート", value: "乳児用×0台  幼児用×0台  学童用×0台" },
+            { label: "カーナビ", value: "標準装備" },
+            { label: "ETC車載器", value: "標準装備" },
+            { label: "免責補償制度", value: "加入する" },
+            { label: "レンタカー安心パック", value: "加入する" }
+        ];
+        
+        // --- RAW DATA from Updated KML ---
+        const RAW_KML_DATA = [
+            { 
+                dayId: "day1", 
+                date: "1/30 (五)", 
+                title: "成田抵達與千葉探索", 
+                themeColor: "bg-[#FFCF56]", 
+                spots: [ 
+                    { name: "成田國際機場", lat: 35.770178, lon: 140.3843215, desc: "旅程起點！扭蛋區別錯過。", mapCode: "137 676 015*32" }, 
+                    { name: "取車櫃台", lat: 35.773998, lon: 140.3872634, desc: "機場2號航廈一樓北出口2號附近的租車櫃檯領取車輛。請直接從櫃檯致電門市，屆時將有接駁車前來接", mapCode: "GPS" },
+                    { name: "航空科學博物館", lat: 35.7403564, lon: 140.3977966, desc: "飛機迷聖地，近距離看起降。", mapCode: "137 558 393*14", ticket: { adult: 900, child: 300 } }, 
+                    { name: "Hard Off Kamagaya Michinobe", lat: 35.7504, lon: 140.001089, desc: "二手尋寶樂趣多。", mapCode: "6 585 585*37" }, 
+                    { name: "Hard off Kashiwa Toyoshiki", lat: 35.864165, lon: 139.947972, desc: "意猶未盡嗎？繼續在柏市的二手店尋找稀有絕版品吧！", mapCode: "18 099 274*62" }, 
+                    { name: "Hotel Torifito Kashiwanoha Campus", lat: 35.8917166, lon: 139.9497834, desc: "大浴場放鬆身心。", mapCode: "18 189 550*14" } 
+                ] 
+            },
+            { 
+                dayId: "day2", 
+                date: "1/31 (六)", 
+                title: "埼玉鐵道與生物探索", 
+                themeColor: "bg-[#90BE6D]", 
+                spots: [ 
+                    { name: "足立區生物園", lat: 35.792449, lon: 139.807227, desc: "溫室蝴蝶與小動物。停車場 Mapcode: 3 142 789*01", mapCode: "3 142 789*01", ticket: { adult: 300, child: 150 } }, 
+                    { name: "Hard Off Soka Sezaki", lat: 35.8155163, lon: 139.8122316, desc: "3 232 445*72", mapCode: "3 232 445*72" },
+                    { name: "Hard Off .. Off House Omiya Higashi", lat: 35.9056813, lon: 139.6569344, desc: "3 544 246*31", mapCode: "3 544 246*31" },
+                    { name: "鐵道博物館", lat: 35.9214247, lon: 139.6179197, desc: "鐵道迷必朝聖。停車場 Mapcode: 14 029 014*48", mapCode: "14 029 014*48", ticket: { adult: 1600, child: 600 } }, 
+                    { name: "Hard Off / Off House Omiya Miyahara", lat: 35.9365868, lon: 139.6232865, desc: "3 630 875*33", mapCode: "3 630 875*33" },
+                    { name: "REF大宮 by Vessel Hotels", lat: 35.9062461, lon: 139.6270131, desc: "晚餐逛街都方便。", mapCode: "3 540 318*44" },
+                    { name: "BOOKOFF PLUS Omiya RAKUUN Store", lat: 35.9077882, lon: 139.6258563, desc: "3 540 494*80", mapCode: "3 540 494*80" }
+                ] 
+            },
+            { 
+                dayId: "day3", 
+                date: "2/1 (日)", 
+                title: "多摩科學與橫濱移動", 
+                themeColor: "bg-[#FF9B85]", 
+                spots: [ 
+                    { name: "多摩六都科學館", lat: 35.7348225, lon: 139.5228711, desc: "世界級圓頂劇場。停車場 Mapcode: 5 228 607*17", mapCode: "5 228 607*17", ticket: { adult: 520, child: 210 } }, 
+                    { name: "Hard Off Hanakoganei", lat: 35.7337604, lon: 139.5124924, desc: "5 226 596*34", mapCode: "5 226 596*34" }, 
+                    { name: "鄉土之森博物館", lat: 35.6567725, lon: 139.4731485, desc: "復古建築與庭園。停車場 Mapcode: 2 852 191*55", mapCode: "2 852 191*55", ticket: { adult: 300, child: 150 } }, 
+                    { name: "BOOKOFF SUPER BAZAAR Tama Nagayama Store", lat: 35.6135953, lon: 139.4433218, desc: "2 698 227*63", mapCode: "2 698 227*63" },
+                    { name: "BOOKOFF SUPER BAZAAR Machida Central St. Main Store", lat: 35.5421243, lon: 139.4484443, desc: "2 429 575*44", mapCode: "2 429 575*44" },
+                    { name: "HOTEL COMENTO YOKOHAMA KANNAI", lat: 35.4411763, lon: 139.6359113, desc: "橫濱夜景盡收眼底。", mapCode: "8 676 500*10" } 
+                ] 
+            },
+            { 
+                dayId: "day4", 
+                date: "2/2 (一)", 
+                title: "橫濱未來港與科學之旅", 
+                themeColor: "bg-[#4D908E]", 
+                spots: [ 
+                    { name: "合味道紀念館 橫濱", lat: 35.4554755, lon: 139.6388669, desc: "製作專屬杯麵。", mapCode: "8 737 211*33", ticket: { adult: 500, child: 0 } }, 
+                    { name: "三菱港未來技術館", lat: 35.4559216, lon: 139.6299412, desc: "尖端科技體驗。", mapCode: "8 735 299*02", ticket: { adult: 500, child: 200 } }, 
+                    { name: "BOOKOFF SUPER BAZAAR 409gou Kawasaki Minatocho Store", lat: 35.5333877, lon: 139.7179369, desc: "101 556*80", mapCode: "101 556*80" },
+                    { name: "BOOKOFF SUPER BAZAAR SEIYU Omori Store", lat: 35.5883262, lon: 139.7303162, desc: "313 180*72", mapCode: "313 180*72" },
+                    { name: "日本科學未來館", lat: 35.6193359, lon: 139.7763995, desc: "台場地標機器人。", mapCode: "408 826*42", ticket: { adult: 630, child: 210 } }, 
+                    { name: "日和飯店舞濱", lat: 35.6462354, lon: 139.8970995, desc: "鄰近迪士尼的溫馨飯店，為明天的行程或返家做好準備。", mapCode: "6 213 121*27" } 
+                ] 
+            },
+            { 
+                dayId: "day5", 
+                date: "2/3 (二)", 
+                title: "船橋安徒生公園與返程", 
+                themeColor: "bg-[#F9C74F]", 
+                spots: [ 
+                    { name: "船橋安徒生公園", lat: 35.760458, lon: 140.0615382, desc: "丹麥風格的主題公園，有超長溜滑梯與美麗花園，盡情放電吧！停車場 Mapcode: 6 652 238*73", mapCode: "6 652 238*73", ticket: { adult: 900, child: 200 } }, 
+                    { name: "Hard Off / Off House / Hobby Off Tomisato Inter", lat: 35.7489725, lon: 140.3108172, desc: "最後掃貨站。", mapCode: "27 892 440*12" },
+                    { name: "ORIX還車", lat: 35.7741437, lon: 140.360417, desc: "還車點", mapCode: "137 673 469*68" } 
+                ] 
+            }
+        ];
+        const EXCHANGE_RATE = 0.215;
+        const EXPENSE_CATEGORIES = [
+            { id: 'food', label: '飲食', Icon: Icons.Coffee, color: 'text-[#E07A5F]', bgColor: 'bg-[#F2CC8F]' },
+            { id: 'shopping', label: '購物', Icon: Icons.ShoppingBag, color: 'text-[#E63946]', bgColor: 'bg-[#FFC8DD]' },
+            { id: 'transport', label: '交通', Icon: Icons.Car, color: 'text-[#457B9D]', bgColor: 'bg-[#A8DADC]' },
+            { id: 'hotel', label: '住宿', Icon: Icons.Hotel, color: 'text-[#1D3557]', bgColor: 'bg-[#BDE0FE]' },
+            { id: 'ticket', label: '門票', Icon: Icons.Ticket, color: 'text-[#2A9D8F]', bgColor: 'bg-[#98F5E1]' },
+            { id: 'fuel', label: '加油', Icon: Icons.Fuel, color: 'text-[#BC4749]', bgColor: 'bg-[#FFB4A2]' },
+            { id: 'other', label: '其他', Icon: Icons.MoreHorizontal, color: 'text-stone-600', bgColor: 'bg-stone-200' },
+        ];
+
+        const WeatherIcon = ({ type }) => {
+            switch (type) {
+                case 'sunny': return <Icons.Sun className="w-5 h-5 text-amber-500" />;
+                case 'snowy': return <Icons.CloudSnow className="w-5 h-5 text-slate-400" />;
+                case 'rainy': return <Icons.CloudRain className="w-5 h-5 text-blue-400" />;
+                case 'cloudy': return <Icons.Cloud className="w-5 h-5 text-stone-400" />;
+                default: return <Icons.CloudSnow className="w-5 h-5 text-stone-300" />;
+            }
+        };
+
+        // --- API Key Modal Component ---
+        const ApiKeyModal = ({ isOpen, onClose }) => {
+            const [key, setKey] = useState('');
+            
+            useEffect(() => {
+                const storedKey = localStorage.getItem('gemini_api_key');
+                if (storedKey) setKey(storedKey);
+            }, [isOpen]);
+
+            const handleSave = () => {
+                localStorage.setItem('gemini_api_key', key.trim());
+                onClose();
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-stone-800/80 backdrop-blur-sm flex items-center justify-center z-[120] p-4 animate-in fade-in duration-200">
+                    <div className="glass-panel rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-bold text-lg text-slate-200 flex items-center gap-2">
+                                <Icons.Settings size={20} /> 設定 AI 金鑰
+                            </h3>
+                            <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/50 transition-colors">
+                                <Icons.X size={20} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-slate-400 mb-4">
+                            內建金鑰已啟用！若您有自己的 Key 可在此更換。
+                        </p>
+                        <input 
+                            type="password" 
+                            value={key} 
+                            onChange={(e) => setKey(e.target.value)} 
+                            placeholder="貼上 API Key (選填)"
+                            className="w-full bg-slate-700 rounded-lg p-3 text-sm mb-4 outline-none focus:ring-2 focus:ring-[#4ECDC4] text-white"
+                        />
+                        <div className="flex gap-2">
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" className="flex-1 text-center py-2 rounded-lg border border-slate-600 text-xs font-bold text-slate-400 hover:bg-slate-700">
+                                取得 Key
+                            </a>
+                            <button onClick={handleSave} className="flex-1 bg-[#4ECDC4] text-white py-2 rounded-lg text-sm font-bold hover:bg-[#3dbdb4]">
+                                儲存
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Chat AI Component ---
+        const AIChatModal = ({ isOpen, onClose, onOpenSettings }) => {
+            const [messages, setMessages] = useState([
+                { role: 'model', text: '你好！我是你的 AI 旅遊顧問。我可以幫你查交通、推薦美食，或是翻譯日文菜單。😊' }
+            ]);
+            const [input, setInput] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages]);
+
+            const handleSend = async () => {
+                if (!input.trim() || isLoading) return;
+
+                const userText = input;
+                setMessages(prev => [...prev, { role: 'user', text: userText }]);
+                setInput('');
+                setIsLoading(true);
+
+                try {
+                    const prompt = `你是一個專業、友善的東京旅遊顧問。請用繁體中文回答用戶的問題。用戶問：${userText}`;
+                    const response = await generateGeminiContent(prompt);
+                    setMessages(prev => [...prev, { role: 'model', text: response }]);
+                } catch (error) {
+                    setMessages(prev => [...prev, { role: 'model', text: `發生錯誤: ${error.message}。請檢查網路連線。` }]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 bg-stone-900/80 backdrop-blur-sm flex items-end md:items-center justify-center z-[110] p-4 animate-in fade-in duration-200">
+                    <div className="glass-panel md:rounded-[2rem] rounded-t-[2rem] shadow-2xl w-full max-w-md h-[80vh] flex flex-col overflow-hidden border border-slate-600 relative">
+                        <div className="bg-[#4ECDC4]/90 p-4 flex justify-between items-center text-white">
+                            <h3 className="font-black text-lg flex items-center gap-2"><Icons.Bot size={24} /> AI 旅遊顧問</h3>
+                            <div className="flex gap-2">
+                                <button onClick={onOpenSettings} className="p-1 hover:bg-white/20 rounded"><Icons.Settings size={20}/></button>
+                                <button onClick={onClose} className="p-1 hover:bg-white/20 rounded"><Icons.X size={20} /></button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-800">
+                            {messages.map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-[#FFCB77] text-slate-900 rounded-tr-none' : 'bg-slate-700 text-slate-200 border border-slate-600 rounded-tl-none'}`}>
+                                        <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) }} />
+                                    </div>
+                                </div>
+                            ))}
+                            {isLoading && (
+                                <div className="flex justify-start">
+                                    <div className="bg-slate-700 p-3 rounded-2xl rounded-tl-none border border-slate-600 typing-indicator space-x-1">
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
+                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={messagesEndRef} />
+                        </div>
+                        <div className="p-4 bg-slate-800 border-t border-slate-700 flex gap-2">
+                            <input 
+                                type="text" 
+                                value={input} 
+                                onChange={e => setInput(e.target.value)}
+                                onKeyPress={e => e.key === 'Enter' && handleSend()}
+                                placeholder="問問看：如何去淺草寺？" 
+                                className="flex-1 bg-slate-700 rounded-full px-4 py-3 outline-none focus:ring-2 focus:ring-[#4ECDC4] transition-all text-white placeholder-slate-400"
+                            />
+                            <button onClick={handleSend} disabled={isLoading} className="bg-[#4ECDC4] text-white p-3 rounded-full hover:bg-[#3dbdb4] disabled:opacity-50 transition-colors">
+                                <Icons.Send size={20} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- App Component ---
+        function App() {
+            const [activeTab, setActiveTab] = useState('itinerary'); 
+            const [selectedDay, setSelectedDay] = useState('all'); 
+            
+            // Location State
+            const [userLocation, setUserLocation] = useState(null);
+            const [isLocating, setIsLocating] = useState(false);
+            const [locationError, setLocationError] = useState(null);
+            const [infoRegion, setInfoRegion] = useState("narita");
+            
+            // AI Souvenir State
+            const [aiSouvenirs, setAiSouvenirs] = useState(null);
+            const [isAiSouvenirLoading, setIsAiSouvenirLoading] = useState(false);
+            
+            // --- Spot Ticket Counts State (Independent for each spot) ---
+            const [spotTicketCounts, setSpotTicketCounts] = useState(() => {
+                const saved = localStorage.getItem('japan_trip_2026_spot_tickets');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            useEffect(() => {
+                localStorage.setItem('japan_trip_2026_spot_tickets', JSON.stringify(spotTicketCounts));
+            }, [spotTicketCounts]);
+
+            // Helper to get counts for a specific spot (defaults to 2 adults, 2 children)
+            const getTicketCounts = (spotId) => {
+                return spotTicketCounts[spotId] || { adult: 2, child: 2 };
+            };
+
+            const updateSpotTicketCount = (spotId, type, delta) => {
+                setSpotTicketCounts(prev => {
+                    const current = prev[spotId] || { adult: 2, child: 2 };
+                    const newValue = Math.max(0, current[type] + delta);
+                    return {
+                        ...prev,
+                        [spotId]: { ...current, [type]: newValue }
+                    };
+                });
+            };
+
+            const [tripData, setTripData] = useState(() => {
+                return RAW_KML_DATA.map(day => {
+                    const processedSpots = day.spots.map((spot, index) => {
+                        const startHour = 9 + (index * 2.5);
+                        const timeStr = `${Math.floor(startHour).toString().padStart(2, '0')}:${(startHour % 1 * 60).toString().padStart(2, '0') === '00' ? '00' : '30'}`;
+                        let nextStopInfo = null;
+                        if (index < day.spots.length - 1) {
+                            const nextSpot = day.spots[index + 1];
+                            const dist = getDistanceFromLatLonInKm(spot.lat, spot.lon, nextSpot.lat, nextSpot.lon);
+                            const driveMins = Math.round((dist / 40) * 60); 
+                            const walkMins = Math.round((dist / 4) * 60);
+                            
+                            nextStopInfo = {
+                                name: nextSpot.name, // 新增：下一站名稱
+                                distance: `${dist} km`,
+                                driveTime: driveMins > 60 ? `${Math.floor(driveMins/60)}hr ${driveMins%60}m` : `${driveMins}m`,
+                                walkTime: walkMins > 60 ? `${Math.floor(walkMins/60)}hr ${walkMins%60}m` : `${walkMins}m`,
+                                navLink: `https://www.google.com/maps/dir/?api=1&origin=${spot.lat},${spot.lon}&destination=${nextSpot.lat},${nextSpot.lon}&travelmode=driving`
+                            };
+                        }
+                        // Ensure ticket information from RAW_KML_DATA is passed down, default to null if not present
+                        const ticketInfo = spot.ticket || null;
+                        
+                        return { 
+                            ...spot, 
+                            id: `${day.dayId}-s${index}`, 
+                            time: timeStr, 
+                            stay: "1.5 hr", 
+                            mapcodeDisplay: spot.mapCode || "GPS", 
+                            weather: ["sunny", "cloudy"][Math.floor(Math.random()*2)], 
+                            temp: "10°C", 
+                            gmapLink: `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lon}`, 
+                            nextStop: nextStopInfo,
+                            ticket: ticketInfo 
+                        };
+                    });
+                    return { ...day, spots: processedSpots };
+                });
+            });
+
+            const [expenses, setExpenses] = useState({});
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isChatOpen, setIsChatOpen] = useState(false);
+            const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+            const [currentEditingSpot, setCurrentEditingSpot] = useState(null);
+            const [expenseForm, setExpenseForm] = useState({ category: 'food', amount: '', note: '' });
+            const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
+            const [transportModes, setTransportModes] = useState({});
+            const [calcJpy, setCalcJpy] = useState('');
+            const [calcTwd, setCalcTwd] = useState('');
+            const [activeTipSpotId, setActiveTipSpotId] = useState(null);
+            const [aiTips, setAiTips] = useState({});
+            const [isTipLoading, setIsTipLoading] = useState(false);
+            const fileInputRef = useRef(null);
+
+            useEffect(() => { 
+                const saved = localStorage.getItem('japan_trip_2026_expenses'); 
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (parsed && typeof parsed === 'object') {
+                             setExpenses(parsed);
+                        }
+                    } catch(e) { console.error(e); }
+                } 
+            }, []);
+
+            useEffect(() => { localStorage.setItem('japan_trip_2026_expenses', JSON.stringify(expenses)); }, [expenses]);
+
+            // Fetch AI Souvenirs
+            const fetchAiSouvenirs = async (lat, lon) => {
+                setIsAiSouvenirLoading(true);
+                setAiSouvenirs(null);
+                try {
+                    const prompt = `我現在在日本的座標: 緯度 ${lat}, 經度 ${lon}。請推薦 3 個這個地點附近必買的知名伴手禮或土產。請直接回傳一個 JSON Array，格式如下，不要有 Markdown 標記或其他文字：
+                    [
+                        {"name": "伴手禮名稱", "desc": "簡短介紹(20字內)"},
+                        {"name": "伴手禮名稱", "desc": "簡短介紹(20字內)"},
+                        {"name": "伴手禮名稱", "desc": "簡短介紹(20字內)"}
+                    ]`;
+                    
+                    let text = await generateGeminiContent(prompt);
+                    // Clean up markdown code blocks if present
+                    text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const data = JSON.parse(text);
+                    if (Array.isArray(data)) {
+                        setAiSouvenirs(data);
+                    } else {
+                        throw new Error("Format error");
+                    }
+                } catch (e) {
+                    console.error("AI Souvenir Error", e);
+                    setAiSouvenirs([{name: "推薦失敗", desc: "無法取得 AI 推薦，請稍後再試。"}]);
+                } finally {
+                    setIsAiSouvenirLoading(false);
+                }
+            };
+
+            // --- Geolocation Handler ---
+            const handleGetLocation = () => {
+                if (window.location.protocol === 'file:') {
+                   alert("⚠️ 注意：您目前是直接開啟 HTML 檔案 (file://)。\n\nGoogle Chrome 的定位功能通常要求在「安全連線 (HTTPS)」下才能運作。\n\n建議將檔案上傳至 Netlify 或使用 Local Server 開啟。");
+                }
+
+                if (!navigator.geolocation) {
+                  setLocationError("您的瀏覽器不支援定位功能");
+                  return;
+                }
+                
+                setIsLocating(true);
+                setLocationError(null);
+
+                const options = {
+                  enableHighAccuracy: true,
+                  timeout: 10000,
+                  maximumAge: 0
+                };
+
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    setUserLocation({
+                      lat: position.coords.latitude,
+                      lon: position.coords.longitude
+                    });
+                    setIsLocating(false);
+                    // Trigger AI Souvenir Search
+                    fetchAiSouvenirs(position.coords.latitude, position.coords.longitude);
+                  },
+                  (error) => {
+                    console.error("Error getting location:", error);
+                    let errorMsg = "無法取得位置";
+                    if (error.code === 1) errorMsg = "請允許瀏覽器存取位置權限";
+                    else if (error.code === 2) errorMsg = "位置資訊不可用 (請確認 Wi-Fi 已開啟)";
+                    else if (error.code === 3) errorMsg = "定位逾時 (請重試)";
+                    
+                    setLocationError(errorMsg);
+                    setIsLocating(false);
+                  },
+                  options
+                );
+            };
+
+            const handleTransportToggle = (spotId) => {
+                setTransportModes(prev => ({
+                    ...prev,
+                    [spotId]: prev[spotId] === 'walk' ? 'car' : 'walk'
+                }));
+            };
+
+            const handleTimeChange = (dayId, spotId, newTime) => {
+                setTripData(prevData => prevData.map(day => {
+                    if (day.dayId !== dayId) return day;
+                    return {
+                        ...day,
+                        spots: day.spots.map(spot => {
+                            if (spot.id !== spotId) return spot;
+                            return { ...spot, time: newTime };
+                        })
+                    };
+                }));
+            };
+
+            const handleGetSpotTip = async (spot) => {
+                if (activeTipSpotId === spot.id) { setActiveTipSpotId(null); return; }
+                setActiveTipSpotId(spot.id);
+                if (aiTips[spot.id]) return;
+
+                setIsTipLoading(true);
+                try {
+                    const prompt = `Tell me one interesting fun fact or practical tip for "${spot.name}" in Japan. Respond in Traditional Chinese. Keep it under 60 words.`;
+                    const tip = await generateGeminiContent(prompt);
+                    setAiTips(prev => ({ ...prev, [spot.id]: tip }));
+                } catch (error) {
+                    if (error.message === 'NO_API_KEY') {
+                        setAiTips(prev => ({ ...prev, [spot.id]: "找不到 API Key，請檢查設定。" }));
+                        setIsKeyModalOpen(true);
+                    } else {
+                        setAiTips(prev => ({ ...prev, [spot.id]: `連線錯誤 (${error.message})，請檢查網路或 Key` }));
+                    }
+                } finally {
+                    setIsTipLoading(false);
+                }
+            };
+            
+            const handleOpenMap = () => {
+                let points = [];
+                if (selectedDay === 'all') {
+                    // Map Hotels
+                    points = HOTEL_INFO.map(h => `${h.lat},${h.lon}`);
+                } else {
+                    // Map Spots
+                    const currentDay = tripData.find(d => d.dayId === selectedDay);
+                    if (currentDay) {
+                         points = currentDay.spots.map(s => `${s.mapcodeDisplay.includes('GPS') || !s.mapcodeDisplay.includes('Tel') ? s.gmapLink.split('query=')[1] : ''}`).filter(p => p);
+                         if(points.length === 0) {
+                             points = currentDay.spots.map(s => `${RAW_KML_DATA.find(d => d.dayId === selectedDay).spots.find(rs => rs.name === s.name).lat},${RAW_KML_DATA.find(d => d.dayId === selectedDay).spots.find(rs => rs.name === s.name).lon}`);
+                         }
+                    }
+                }
+                
+                if (points.length > 0) {
+                    const url = `https://www.google.com/maps/dir/${points.join('/')}`;
+                    window.open(url, '_blank');
+                }
+            };
+
+            const openExpenseModal = (spot) => { setCurrentEditingSpot(spot); setExpenseForm({ category: 'food', amount: '', note: '' }); setIsModalOpen(true); };
+            const saveExpense = () => { if (!currentEditingSpot || !expenseForm.amount) return; const spotId = currentEditingSpot.id; const newRecord = { id: Date.now(), category: expenseForm.category, amount: parseInt(expenseForm.amount), note: expenseForm.note }; setExpenses(prev => ({ ...prev, [spotId]: [...(prev[spotId] || []), newRecord] })); setIsModalOpen(false); };
+            const deleteExpense = (spotId, recordId) => { setExpenses(prev => ({ ...prev, [spotId]: prev[spotId].filter(r => r.id !== recordId) })); };
+            const handleCalcChange = (type, value) => { if (value === '') { setCalcJpy(''); setCalcTwd(''); return; } const num = parseFloat(value); if (type === 'jpy') { setCalcJpy(value); setCalcTwd((num * EXCHANGE_RATE).toFixed(0)); } else { setCalcTwd(value); setCalcJpy((num / EXCHANGE_RATE).toFixed(0)); } };
+            
+            const handleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                setIsAnalyzingReceipt(true);
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64String = reader.result;
+                    try {
+                        const prompt = `Analyze this receipt image. Extract: 1. Total amount (number). 2. Store name (max 10 chars, Traditional Chinese). 3. Date and Time (YYYY/MM/DD HH:mm). Return JSON: {"amount": number, "store": "string", "date": "string"}.`;
+                        let responseText = await generateGeminiContent(prompt, base64String);
+                        
+                        // 2. Improved JSON Parsing Logic
+                        let result;
+                        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+                        if (jsonMatch) {
+                            result = JSON.parse(jsonMatch[0]);
+                        } else {
+                            // Fallback cleanup
+                            responseText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+                            result = JSON.parse(responseText);
+                        }
+                        
+                        if (result && (result.amount || result.amount === 0)) {
+                            // Ensure amount is a clean number/string for input type="number"
+                            const cleanAmount = String(result.amount).replace(/[^0-9.]/g, '');
+                            const autoNote = (result.date ? result.date + " " : "") + (result.store || "");
+                            setExpenseForm(prev => ({
+                                ...prev,
+                                amount: cleanAmount,
+                                note: autoNote
+                            }));
+                        } else {
+                             throw new Error("Invalid JSON structure");
+                        }
+                    } catch (error) {
+                        console.error("Receipt Analysis Error:", error);
+                        alert("收據辨識失敗，請手動輸入。");
+                    } finally {
+                        setIsAnalyzingReceipt(false);
+                        // Reset file input
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                    }
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const stats = useMemo(() => { 
+                let totalJpy = 0; 
+                const currentExpenses = expenses || {};
+                Object.values(currentExpenses).forEach(recs => {
+                    if (Array.isArray(recs)) {
+                        recs.forEach(r => totalJpy += (r.amount || 0));
+                    }
+                });
+
+                if (tripData) {
+                    tripData.forEach(day => {
+                        if (day.spots) {
+                            day.spots.forEach(spot => {
+                                if (spot.ticket) {
+                                    const counts = spotTicketCounts[spot.id] || { adult: 2, child: 2 }; 
+                                    totalJpy += (spot.ticket.adult * counts.adult + spot.ticket.child * counts.child);
+                                }
+                            });
+                        }
+                    });
+                }
+                return { totalJpy }; 
+            }, [expenses, tripData, spotTicketCounts]);
+
+            const dailyStats = useMemo(() => {
+                if (!tripData) return [];
+                const currentExpenses = expenses || {};
+                return tripData.map(day => {
+                    let dayTotal = 0;
+                    if (day.spots) {
+                        day.spots.forEach(spot => {
+                            const spotExpenses = currentExpenses[spot.id] || [];
+                            if (Array.isArray(spotExpenses)) {
+                                spotExpenses.forEach(e => dayTotal += (e.amount || 0));
+                            }
+                            if (spot.ticket) {
+                                const counts = spotTicketCounts[spot.id] || { adult: 2, child: 2 };
+                                dayTotal += (spot.ticket.adult * counts.adult + spot.ticket.child * counts.child);
+                            }
+                        });
+                    }
+                    return {
+                        ...day,
+                        totalJpy: dayTotal,
+                        totalTwd: dayTotal * EXCHANGE_RATE
+                    };
+                });
+            }, [expenses, tripData, spotTicketCounts]);
+
+            const filteredTripData = selectedDay === 'all' ? tripData : tripData.filter(day => day.dayId === selectedDay);
+
+            return (
+                <div className="min-h-screen pb-24">
+                    <nav className="sticky top-0 z-50 bg-[#0B1121]/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center h-20">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-[#FF9F1C] p-2 rounded-2xl text-white shadow-lg -rotate-6 border border-white/20">
+                                        <Icons.Plane size={24} strokeWidth={3} />
+                                    </div>
+                                    <div>
+                                        <div className="font-extrabold text-2xl tracking-tight text-slate-100 flex items-center gap-2">
+                                            2026 冬旅 <Icons.Smile className="text-[#FF9F1C]" size={20}/>
+                                        </div>
+                                        <div className="text-xs font-bold text-[#FF9F1C] tracking-widest uppercase bg-[#FF9F1C]/20 px-2 py-0.5 rounded-full inline-block border border-[#FF9F1C]/30">Tokyo Winter Trip</div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsKeyModalOpen(true)} className="md:hidden bg-slate-800 p-2 rounded-full text-slate-400 border border-slate-700"><Icons.Settings size={20} /></button>
+                                    <div className="text-right hidden sm:block">
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase bg-slate-800 px-2 rounded-full border border-slate-700">Total</div>
+                                        <div className="font-mono font-bold text-[#FF6B6B] text-lg">¥ {stats.totalJpy.toLocaleString()}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-5xl mx-auto p-4 md:p-8">
+                        {/* 行程分頁 */}
+                        {activeTab === 'itinerary' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
+                                <div className="flex flex-wrap gap-3 mb-8 justify-center sticky top-24 z-40 py-2 bg-[#0B1121]/80 backdrop-blur rounded-2xl border border-slate-700/50">
+                                    <button onClick={() => setSelectedDay('all')} className={`px-5 py-2 rounded-xl text-sm font-bold border transition-all shadow-sm ${selectedDay === 'all' ? 'bg-slate-200 text-slate-900 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'}`}>全部</button>
+                                    {tripData.map(day => (
+                                        <button key={day.dayId} onClick={() => setSelectedDay(day.dayId)} className={`px-5 py-2 rounded-xl text-sm font-bold border transition-all shadow-sm ${selectedDay === day.dayId ? `${day.themeColor} text-slate-900 border-transparent` : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'}`}>
+                                            {day.date.split(' ')[0]}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="space-y-12">
+                                    {filteredTripData.map((day) => (
+                                        <div key={day.dayId} className="relative">
+                                            <div className="flex items-center gap-4 mb-6">
+                                                <div className={`${day.themeColor} w-16 h-16 rounded-2xl flex flex-col items-center justify-center text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.1)] border-2 border-slate-700 -rotate-2`}>
+                                                    <span className="text-xs font-bold uppercase">Day</span>
+                                                    <span className="text-2xl font-black leading-none">{day.dayId.replace('day','')}</span>
+                                                </div>
+                                                <div className="glass-panel px-6 py-2 rounded-r-2xl rounded-bl-2xl shadow-sm border border-slate-700 flex-1">
+                                                    <div className="text-2xl font-black text-slate-200">{day.date}</div>
+                                                    <div className="text-lg font-bold text-slate-400">{day.title}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-8 pl-4 border-l-4 border-dotted border-slate-700 ml-8">
+                                                {day.spots.map((spot) => {
+                                                    const spotExpenses = expenses[spot.id] || [];
+                                                    const spotTotal = spotExpenses.reduce((sum, r) => sum + (r.amount || 0), 0);
+                                                    const isShowingTip = activeTipSpotId === spot.id;
+                                                    
+                                                    const counts = getTicketCounts(spot.id);
+                                                    const ticketTotal = spot.ticket ? (spot.ticket.adult * counts.adult + spot.ticket.child * counts.child) : 0;
+                                                    const totalCostDisplay = spotTotal + ticketTotal;
+
+                                                    return (
+                                                        <div key={spot.id} className="relative group">
+                                                            <div className="absolute -left-[29px] top-6 w-5 h-5 rounded-full bg-[#0B1121] border-4 border-[#FFCB77] z-10 shadow-[0_0_10px_#FFCB77]"></div>
+                                                            <div className="glass-panel rounded-[2rem] p-6 md:p-8 shadow-lg border border-slate-700 transition-all hover:-translate-y-1 hover:border-slate-500 hover:shadow-[0_10px_30px_rgba(0,0,0,0.5)] bg-[#1e293b]">
+                                                                <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4">
+                                                                    <div className="flex-1 w-full">
+                                                                        <div className="flex items-center justify-between mb-3">
+                                                                            <div className="relative group/time">
+                                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#E07A5F] z-10"><Icons.Clock size={14}/></span>
+                                                                                <input type="time" value={spot.time} onChange={(e) => handleTimeChange(day.dayId, spot.id, e.target.value)} className="pl-7 pr-6 py-1 bg-[#334155] rounded-xl text-[#E07A5F] font-bold text-sm font-mono border border-slate-600 shadow-sm outline-none focus:border-[#E07A5F] transition-all cursor-pointer transform -rotate-1 hover:scale-105" />
+                                                                                <Icons.Edit3 size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 opacity-50 pointer-events-none" />
+                                                                            </div>
+                                                                        </div>
+                                                                        <h3 className="text-2xl font-black text-slate-100 mb-2">{spot.name}</h3>
+                                                                        <div className="flex items-center gap-4 text-sm font-bold text-slate-400 mb-4 bg-slate-800 w-fit px-3 py-1 rounded-lg border border-slate-700">
+                                                                            <span className="flex items-center gap-1"><WeatherIcon type={spot.weather} /> {spot.temp}</span>
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                                                                            <span className="flex items-center gap-1">停留 {spot.stay}</span>
+                                                                        </div>
+                                                                        
+                                                                        {spot.ticket && (
+                                                                            <div className="mb-4 bg-[#0f172a] border border-slate-700 p-3 rounded-xl">
+                                                                                <div className="flex flex-col gap-2">
+                                                                                    <div className="flex items-center justify-between border-b border-slate-700 pb-2">
+                                                                                        <div className="flex items-center gap-2 text-[#FFCB77] font-bold">
+                                                                                            <Icons.Ticket size={16} />
+                                                                                            <span>門票估算</span>
+                                                                                        </div>
+                                                                                        <div className="font-mono font-bold text-lg text-[#FFCB77]">
+                                                                                            ¥{ticketTotal.toLocaleString()}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    
+                                                                                    <div className="flex justify-between items-center text-xs text-slate-400">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <span>大人 (¥{spot.ticket.adult})</span>
+                                                                                            <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-600">
+                                                                                                <button onClick={() => updateSpotTicketCount(spot.id, 'adult', -1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors">-</button>
+                                                                                                <span className="font-mono w-4 text-center text-white font-bold">{counts.adult}</span>
+                                                                                                <button onClick={() => updateSpotTicketCount(spot.id, 'adult', 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors">+</button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <span>兒童 (¥{spot.ticket.child})</span>
+                                                                                            <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-0.5 border border-slate-600">
+                                                                                                <button onClick={() => updateSpotTicketCount(spot.id, 'child', -1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors">-</button>
+                                                                                                <span className="font-mono w-4 text-center text-white font-bold">{counts.child}</span>
+                                                                                                <button onClick={() => updateSpotTicketCount(spot.id, 'child', 1)} className="w-6 h-6 flex items-center justify-center hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors">+</button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                        <div className="text-lg font-bold text-slate-300 leading-relaxed mb-6 relative">
+                                                                            <span className="text-4xl absolute -top-4 -left-2 text-slate-700 z-0">“</span>
+                                                                            <p className="relative z-10">{spot.desc}</p>
+                                                                        </div>
+                                                                        <div className="flex flex-wrap gap-2 mb-4">
+                                                                            <div className="bg-slate-800 border border-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 flex items-center gap-1">
+                                                                                <Icons.MapPin size={12} className="text-[#4ECDC4]" /> {spot.mapcodeLabel}: <span className="font-mono text-slate-300">{spot.mapcodeDisplay}</span>
+                                                                            </div>
+                                                                            <a href={spot.gmapLink} target="_blank" rel="noreferrer" className="bg-[#4ECDC4] text-white hover:bg-[#3dbdb4] px-3 py-1.5 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 shadow-[0_2px_10px_rgba(78,205,196,0.3)] active:translate-y-[1px] active:shadow-none">
+                                                                                打開地圖 <Icons.ExternalLink size={10} />
+                                                                            </a>
+                                                                            <button 
+                                                                                onClick={() => handleGetSpotTip(spot)} 
+                                                                                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 border ${isShowingTip ? 'bg-[#8b5cf6] text-white border-[#8b5cf6] shadow-[0_0_15px_rgba(139,92,246,0.5)]' : 'bg-slate-800 text-[#a78bfa] border-[#8b5cf6] hover:bg-[#8b5cf6]/20'}`}
+                                                                            >
+                                                                                <Icons.Sparkles size={12} /> {isShowingTip ? '隱藏密技' : 'AI 密技'}
+                                                                            </button>
+                                                                        </div>
+
+                                                                        {isShowingTip && (
+                                                                            <div className="animate-in slide-in-from-top-2 duration-300">
+                                                                                <div className="bg-[#2e1065]/50 border border-[#8b5cf6]/50 rounded-2xl p-4 relative mt-2 backdrop-blur-sm">
+                                                                                    <div className="absolute -top-2.5 left-6 w-4 h-4 bg-[#2e1065] border-t border-l border-[#8b5cf6]/50 transform rotate-45"></div>
+                                                                                    <h4 className="font-black text-[#a78bfa] text-xs uppercase mb-2 flex items-center gap-1"><Icons.Sparkles size={12}/> Gemini Spot Insight</h4>
+                                                                                    {isTipLoading && !aiTips[spot.id] ? (
+                                                                                        <div className="typing-indicator flex gap-1 items-center h-6">
+                                                                                            <span className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full"></span>
+                                                                                            <span className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full"></span>
+                                                                                            <span className="w-1.5 h-1.5 bg-[#a78bfa] rounded-full"></span>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <p className="text-sm font-bold text-slate-200 leading-relaxed">
+                                                                                            {aiTips[spot.id]}
+                                                                                        </p>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                    </div>
+                                                                    <button onClick={() => openExpenseModal(spot)} className="self-start md:self-center bg-[#FFCB77] text-slate-900 p-4 rounded-2xl transition-all shadow-[0_4px_15px_rgba(255,203,119,0.3)] hover:-translate-y-1 hover:bg-[#ffbf57] active:translate-y-0 border border-white/10">
+                                                                        <Icons.Wallet size={24} strokeWidth={2.5} />
+                                                                    </button>
+                                                                </div>
+                                                                {(spotTotal > 0 || ticketTotal > 0) && (
+                                                                    <div className="mt-4 pt-4 border-t border-dashed border-slate-700 flex justify-end items-center gap-2">
+                                                                        <span className="text-xs font-bold text-slate-500 uppercase bg-slate-800 px-2 py-0.5 rounded border border-slate-700">Estimated Total</span>
+                                                                        <span className="text-xl font-mono font-black text-[#FF6B6B]">¥{totalCostDisplay.toLocaleString()}</span>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            {spot.nextStop && (
+                                                                <div className="relative flex flex-col items-center my-6 gap-3">
+                                                                    <div className="absolute top-0 bottom-0 w-0.5 bg-slate-700 -z-10"></div>
+                                                                    
+                                                                    <div className="bg-slate-800 border border-slate-600 px-4 py-2 rounded-2xl flex flex-col items-center gap-1 text-xs text-slate-400 shadow-lg z-10">
+                                                                        <span className="font-bold text-slate-300">前往：{spot.nextStop.name}</span>
+                                                                        <div className="flex items-center gap-3">
+                                                                            <span className="font-mono text-[#4ECDC4]">{spot.nextStop.distance}</span>
+                                                                            <span className="w-px h-3 bg-slate-600"></span>
+                                                                            <button onClick={() => handleTransportToggle(spot.id)} className="flex items-center gap-1 hover:text-[#4ECDC4] transition-colors font-bold">
+                                                                                 {transportModes[spot.id] === 'walk' ? <><Icons.Footprints size={12} className="text-[#FF9F1C]"/> {spot.nextStop.walkTime}</> : <><Icons.Car size={12} className="text-[#4ECDC4]"/> {spot.nextStop.driveTime}</>}
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <a href={spot.nextStop.navLink} target="_blank" rel="noreferrer" className="bg-[#4ECDC4] text-white px-4 py-2 rounded-full text-xs font-bold shadow-[0_0_15px_rgba(78,205,196,0.4)] hover:bg-[#3dbdb4] hover:scale-105 transition-all flex items-center gap-1 z-10 border border-white/10">
+                                                                        <Icons.Navigation size={14} /> Google 導航
+                                                                    </a>
+                                                                    
+                                                                    <div className="text-slate-600 mt-1"><Icons.ArrowDown size={20} /></div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 資訊分頁 */}
+                        {activeTab === 'info' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 space-y-8">
+                                
+                                {/* 📍 NEW: Navigation & Souvenir Guide */}
+                                <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
+                                    <h3 className="text-2xl font-black text-slate-200 mb-6 flex items-center gap-2">
+                                        <span className="bg-[#4ECDC4] p-2 rounded-xl text-white shadow-lg"><Icons.Navigation size={20}/></span> 
+                                        實用導航 & 必買攻略
+                                    </h3>
+                                    
+                                    {/* Location Controller */}
+                                    <div className="mb-8 flex flex-col items-center justify-center p-4 bg-[#0f172a]/50 rounded-2xl border border-slate-700/50">
+                                        <button 
+                                          onClick={handleGetLocation}
+                                          disabled={isLocating}
+                                          className={`
+                                            relative overflow-hidden group px-6 py-3 rounded-xl font-bold text-sm tracking-wide transition-all shadow-lg flex items-center gap-2
+                                            ${userLocation 
+                                              ? 'bg-[#4ECDC4]/20 text-[#4ECDC4] border border-[#4ECDC4]' 
+                                              : 'bg-gradient-to-r from-[#FF9F1C] to-[#E07A5F] text-white border border-transparent hover:scale-105 shadow-[#FF9F1C]/20'
+                                            }
+                                          `}
+                                        >
+                                          {isLocating ? (
+                                             <><Icons.Loader2 className="animate-spin" size={16}/> 定位中...</>
+                                          ) : userLocation ? (
+                                             <><Icons.MapPin size={16}/> 已取得位置 (點擊重新整理推薦)</>
+                                          ) : (
+                                             <><Icons.LocateFixed size={16}/> 點擊取得目前位置</>
+                                          )}
+                                        </button>
+                                        
+                                        {locationError && (
+                                          <div className="text-red-400 text-xs mt-3 font-bold animate-pulse flex items-center gap-1 bg-red-900/20 px-3 py-1 rounded-full">
+                                            <Icons.AlertTriangle size={14}/> {locationError}
+                                          </div>
+                                        )}
+                                        
+                                        {userLocation && (
+                                          <div className="text-slate-400 text-[10px] mt-2 font-mono">
+                                            Lat: {userLocation.lat.toFixed(4)}, Lon: {userLocation.lon.toFixed(4)}
+                                          </div>
+                                        )}
+                                    </div>
+
+                                    {/* Quick Nav Buttons Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                                        {NAV_BUTTONS.map((btn, idx) => {
+                                          let href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(btn.query)}`;
+                                          if (userLocation) {
+                                             href = `https://www.google.com/maps/search/${encodeURIComponent(btn.query)}/@${userLocation.lat},${userLocation.lon},14z`;
+                                          }
+
+                                          return (
+                                            <a 
+                                              key={idx}
+                                              href={href}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className={`flex flex-col items-center justify-center p-4 rounded-2xl border hover:scale-[1.03] transition-transform group ${btn.color.replace('text-', 'hover:text-white hover:bg-opacity-100 ')}`}
+                                            >
+                                              <btn.Icon size={28} className="mb-2 group-hover:scale-110 transition-transform"/>
+                                              <span className="text-sm font-bold">{btn.label}</span>
+                                              {userLocation && <span className="text-[10px] mt-1 opacity-70 bg-black/20 px-2 rounded-full">(附近)</span>}
+                                            </a>
+                                          )
+                                        })}
+                                    </div>
+
+                                    {/* Souvenir Section */}
+                                    <div className="border-t border-slate-700 pt-6">
+                                        <div className="flex justify-between items-center mb-6">
+                                          <h4 className="text-sm font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                            <Icons.Gift size={16} className="text-[#FF9F1C]"/>
+                                            AI 伴手禮密技
+                                          </h4>
+                                          {!userLocation && (
+                                              <select 
+                                                value={infoRegion} 
+                                                onChange={(e) => setInfoRegion(e.target.value)}
+                                                className="bg-slate-800 text-white text-xs py-2 px-4 rounded-xl border border-slate-600 outline-none focus:border-[#4ECDC4] cursor-pointer"
+                                              >
+                                                {Object.entries(REGION_DATA).map(([key, data]) => (
+                                                  <option key={key} value={key}>{data.label}</option>
+                                                ))}
+                                              </select>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="bg-[#0f172a]/50 rounded-2xl p-6 border border-slate-700 relative overflow-hidden min-h-[160px]">
+                                          {userLocation ? (
+                                              /* AI Mode */
+                                              <>
+                                                  <div className="text-lg font-bold mb-4 text-[#4ECDC4] relative z-10 flex items-center gap-2">
+                                                     📍 根據您目前位置的推薦：
+                                                  </div>
+                                                  
+                                                  {isAiSouvenirLoading ? (
+                                                      <div className="flex flex-col items-center justify-center py-8 relative z-10">
+                                                          <div className="typing-indicator flex gap-1 items-center h-6 mb-2">
+                                                              <span className="w-2 h-2 bg-[#4ECDC4] rounded-full"></span>
+                                                              <span className="w-2 h-2 bg-[#4ECDC4] rounded-full"></span>
+                                                              <span className="w-2 h-2 bg-[#4ECDC4] rounded-full"></span>
+                                                          </div>
+                                                          <span className="text-xs text-slate-400">正在分析當地名產...</span>
+                                                      </div>
+                                                  ) : (
+                                                      <>
+                                                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 relative z-10">
+                                                            {aiSouvenirs && aiSouvenirs.map((item, idx) => (
+                                                              <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-[#4ECDC4]/50 transition-colors group">
+                                                                <div className="text-slate-200 font-bold text-sm group-hover:text-[#4ECDC4] transition-colors">{item.name}</div>
+                                                                <div className="text-slate-500 text-[10px] mt-1">{item.desc}</div>
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                          <a 
+                                                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((aiSouvenirs?.map(s => s.name.split(' ')[0]).join(' OR ') || 'souvenirs') + ' near me')}`}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="block mt-6 text-center text-xs font-bold text-[#4ECDC4] hover:text-white bg-slate-800/50 py-3 rounded-xl border border-[#4ECDC4]/30 hover:bg-[#4ECDC4] transition-all relative z-10"
+                                                          >
+                                                            <span className="flex items-center justify-center gap-2">
+                                                                <Icons.Search size={14}/> 在地圖上搜尋這些推薦
+                                                            </span>
+                                                          </a>
+                                                      </>
+                                                  )}
+                                                  <div className="absolute -right-10 -bottom-10 w-40 h-40 rounded-full opacity-10 blur-2xl bg-[#4ECDC4]"></div>
+                                              </>
+                                          ) : (
+                                              /* Manual Mode (Fallback) */
+                                              <>
+                                                  <div className={`text-lg font-bold mb-4 ${REGION_DATA[infoRegion].color} relative z-10`}>
+                                                     你在{REGION_DATA[infoRegion].label}嗎？必買推薦：
+                                                  </div>
+                                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 relative z-10">
+                                                    {REGION_DATA[infoRegion].souvenirs.map((item, idx) => (
+                                                      <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700 hover:border-[#FF9F1C]/50 transition-colors group">
+                                                        <div className="text-slate-200 font-bold text-sm group-hover:text-[#FF9F1C] transition-colors">{item.name}</div>
+                                                        <div className="text-slate-500 text-[10px] mt-1">{item.desc}</div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                  <a 
+                                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(REGION_DATA[infoRegion].souvenirs.map(s => s.name.split(' ')[0]).join(' OR ') + ' near me')}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="block mt-6 text-center text-xs font-bold text-[#FF9F1C] hover:text-white bg-slate-800/50 py-3 rounded-xl border border-[#FF9F1C]/30 hover:bg-[#FF9F1C] transition-all relative z-10"
+                                                  >
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <Icons.Search size={14}/> 在地圖上搜尋這些伴手禮
+                                                    </span>
+                                                  </a>
+                                                  <div className={`absolute -right-10 -bottom-10 w-40 h-40 rounded-full opacity-10 blur-2xl ${REGION_DATA[infoRegion].color.replace('text-', 'bg-')}`}></div>
+                                              </>
+                                          )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Flight Info */}
+                                <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
+                                    <h3 className="text-2xl font-black text-slate-200 mb-6 flex items-center gap-2"><span className="bg-[#4ECDC4] p-2 rounded-xl text-white rotate-3 shadow-lg"><Icons.Plane size={20} /></span>航班資訊</h3>
+                                    <div className="space-y-6">
+                                        <div className="bg-[#064e3b]/30 p-6 rounded-3xl border border-[#059669]/50 relative overflow-hidden backdrop-blur-sm">
+                                            <div className="flex justify-between items-center mb-4 relative z-10"><span className="bg-[#059669] text-white text-xs font-black px-3 py-1 rounded-full shadow-md">去程</span><span className="font-bold text-slate-300">{FLIGHT_INFO.outbound.date}</span></div>
+                                            <div className="flex justify-between items-center text-center relative z-10">
+                                                <div><div className="text-4xl font-black text-slate-100">{FLIGHT_INFO.outbound.dep}</div><div className="text-sm font-bold text-slate-400">{FLIGHT_INFO.outbound.from}</div></div>
+                                                <div className="flex-1 px-4 flex flex-col items-center"><div className="text-xs font-bold text-slate-500 mb-1">{FLIGHT_INFO.outbound.duration}</div><div className="w-full border-t border-dashed border-slate-600 relative my-2"><Icons.Plane size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#4ECDC4] bg-[#064e3b] px-1 rotate-90 rounded-full" /></div><div className="text-xs font-bold text-[#4ECDC4] mt-1">{FLIGHT_INFO.outbound.flight}</div></div>
+                                                <div><div className="text-4xl font-black text-slate-100">{FLIGHT_INFO.outbound.arr}</div><div className="text-sm font-bold text-slate-400">{FLIGHT_INFO.outbound.to}</div></div>
+                                            </div>
+                                        </div>
+                                        <div className="bg-[#881337]/30 p-6 rounded-3xl border border-[#e11d48]/50 relative overflow-hidden backdrop-blur-sm">
+                                            <div className="flex justify-between items-center mb-4 relative z-10"><span className="bg-[#e11d48] text-white text-xs font-black px-3 py-1 rounded-full shadow-md">回程</span><span className="font-bold text-slate-300">{FLIGHT_INFO.inbound.date}</span></div>
+                                            <div className="flex justify-between items-center text-center relative z-10">
+                                                <div><div className="text-4xl font-black text-slate-100">{FLIGHT_INFO.inbound.dep}</div><div className="text-sm font-bold text-slate-400">{FLIGHT_INFO.inbound.from}</div></div>
+                                                <div className="flex-1 px-4 flex flex-col items-center"><div className="text-xs font-bold text-slate-500 mb-1">{FLIGHT_INFO.inbound.duration}</div><div className="w-full border-t border-dashed border-slate-600 relative my-2"><Icons.Plane size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-[#fb7185] bg-[#881337] px-1 rotate-90 rounded-full" /></div><div className="text-xs font-bold text-[#fb7185] mt-1">{FLIGHT_INFO.inbound.flight}</div></div>
+                                                <div><div className="text-4xl font-black text-slate-100">{FLIGHT_INFO.inbound.arr}</div><div className="text-sm font-bold text-slate-400">{FLIGHT_INFO.inbound.to}</div></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* 🚗 NEW: Rental Car Info Block */}
+                                <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
+                                    <h3 className="text-2xl font-black text-slate-200 mb-6 flex items-center gap-2">
+                                        <span className="bg-[#3B82F6] p-2 rounded-xl text-white rotate-1 shadow-lg"><Icons.Car size={20} /></span>
+                                        レンタカー予約情報
+                                        <span className="text-xs bg-slate-700 text-slate-300 px-2 py-1 rounded ml-2">店員提示用</span>
+                                    </h3>
+                                    <div className="bg-[#1e293b] p-6 rounded-2xl border border-slate-600 font-mono text-sm leading-relaxed text-slate-300">
+                                        <ul className="space-y-2 list-disc list-inside">
+                                            {RENTAL_INFO_LIST.map((item, idx) => (
+                                                <li key={idx} className="break-words">
+                                                    <span className="font-bold text-slate-200">{item.label}：</span>
+                                                    {item.value}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                                <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
+                                    <h3 className="text-2xl font-black text-slate-200 mb-6 flex items-center gap-2"><span className="bg-[#FF9F1C] p-2 rounded-xl text-white -rotate-2 shadow-lg"><Icons.Hotel size={20} /></span>住宿安排</h3>
+                                    <div className="grid gap-4">
+                                        {HOTEL_INFO.map((hotel, idx) => (
+                                            <div key={idx} className="flex gap-4 p-4 rounded-2xl hover:bg-[#334155] transition-colors border border-slate-700 hover:border-[#FFCB77]/50 group bg-[#1e293b]">
+                                                <div className="bg-slate-700 text-white font-bold text-sm h-10 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-md group-hover:bg-[#FF9F1C] transition-colors">{hotel.day}</div>
+                                                <div className="flex-1"><h4 className="font-bold text-lg text-slate-200">{hotel.name}</h4><p className="text-sm font-bold text-slate-400 mt-1">{hotel.location} • {hotel.desc}</p></div>
+                                                <a href={hotel.link} target="_blank" rel="noreferrer" className="self-center bg-slate-800 border border-slate-600 p-2 rounded-full text-slate-400 hover:text-[#FF9F1C] hover:border-[#FF9F1C] transition-colors"><Icons.Navigation size={20} /></a>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="glass-panel rounded-[2rem] p-6 shadow-lg border border-slate-700">
+                                        <h3 className="text-lg font-black text-slate-200 mb-4">緊急聯絡</h3>
+                                        <div className="space-y-4">
+                                            <a href="tel:119" className="flex items-center justify-between p-4 bg-[#450a0a]/50 rounded-2xl text-red-200 font-bold hover:bg-[#450a0a] transition-colors border border-red-900"><span>🚑 救護車/火警</span><span className="text-2xl font-black">119</span></a>
+                                            <a href="tel:110" className="flex items-center justify-between p-4 bg-[#172554]/50 rounded-2xl text-blue-200 font-bold hover:bg-[#172554] transition-colors border border-blue-900"><span>🚓 警察局</span><span className="text-2xl font-black">110</span></a>
+                                        </div>
+                                    </div>
+                                    <div className="glass-panel rounded-[2rem] p-6 shadow-lg border border-slate-700">
+                                        <h3 className="text-lg font-black text-slate-200 mb-4">實用連結</h3>
+                                        <div className="space-y-3">
+                                            <a href="https://vjw-lp.digital.go.jp/zh-hant/" target="_blank" rel="noreferrer" className="block w-full text-center py-3 bg-gradient-to-r from-[#4ECDC4] to-[#2cb5ac] text-white font-bold rounded-xl shadow-lg active:translate-y-1 active:shadow-none transition-all border border-white/10">Visit Japan Web</a>
+                                            <a href="https://www.google.com/maps" target="_blank" rel="noreferrer" className="block w-full text-center py-3 bg-slate-700 border border-slate-600 text-slate-200 font-bold rounded-xl hover:bg-slate-600 active:bg-slate-500 transition-colors">Google Maps</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 統計分頁 */}
+                        {activeTab === 'stats' && (
+                            <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 space-y-8">
+                                <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
+                                    <h3 className="text-2xl font-black text-slate-200 mb-8 flex items-center gap-3"><span className="bg-[#FF6B6B] p-2 rounded-xl text-white rotate-2 shadow-lg"><Icons.ArrowRightLeft size={20} /></span>匯率計算</h3>
+                                    <div className="grid md:grid-cols-2 gap-8 items-center">
+                                        <div className="relative"><label className="absolute -top-3 left-4 bg-[#0f172a] px-3 py-0.5 rounded-full border border-[#FF9F1C] text-xs font-bold text-[#FF9F1C]">JPY 日幣</label><input type="number" value={calcJpy} onChange={(e) => handleCalcChange('jpy', e.target.value)} className="w-full bg-[#1e293b] rounded-3xl p-6 text-3xl font-mono font-bold text-slate-200 outline-none border-2 border-transparent focus:border-[#FF9F1C] transition-all text-center" placeholder="0" /></div>
+                                        <div className="relative"><label className="absolute -top-3 left-4 bg-[#0f172a] px-3 py-0.5 rounded-full border border-slate-500 text-xs font-bold text-slate-400">TWD 台幣</label><input type="number" value={calcTwd} onChange={(e) => handleCalcChange('twd', e.target.value)} className="w-full bg-[#334155] rounded-3xl p-6 text-3xl font-mono font-bold text-slate-200 outline-none border-2 border-transparent focus:border-slate-400 transition-all text-center" placeholder="0" /></div>
+                                    </div>
+                                    <div className="mt-6 text-center"><span className="bg-slate-800 text-slate-400 font-mono text-xs px-3 py-1 rounded-full font-bold border border-slate-700">1 JPY ≈ {EXCHANGE_RATE} TWD</span></div>
+                                </div>
+                                <div className="space-y-4">
+                                    <h3 className="text-xl font-black text-slate-200 ml-2 flex items-center gap-2"><Icons.Star className="text-[#FFCB77]" fill="#FFCB77" /> 每日花費</h3>
+                                    {dailyStats.map((day) => (
+                                        <div key={day.dayId} className="bg-[#1e293b] p-5 rounded-2xl shadow-md border border-slate-700 flex justify-between items-center transition-transform hover:-translate-y-1 hover:border-slate-500">
+                                            <div className="flex items-center gap-4"><div className={`${day.themeColor} px-3 py-1 rounded-lg text-xs font-black text-slate-900 shadow-sm`}>{day.date}</div><div className="font-bold text-slate-200">{day.title}</div></div>
+                                            <div className="text-right"><div className="text-[10px] font-bold text-slate-500 uppercase">Total</div><div className="text-lg font-mono font-black text-[#FF6B6B]">¥ {day.totalJpy.toLocaleString()}</div></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* Footer Nav */}
+                    <div className="fixed bottom-0 w-full bg-[#0B1121]/95 backdrop-blur-md border-t border-slate-700 pb-safe z-40 flex justify-around py-3 text-xs font-bold text-slate-500">
+                        <button onClick={() => setActiveTab('itinerary')} className={`flex flex-col items-center gap-1 ${activeTab === 'itinerary' ? 'text-[#FFCB77]' : 'hover:text-slate-300'}`}><Icons.List size={22} /> 行程</button>
+                        <button onClick={() => setActiveTab('info')} className={`flex flex-col items-center gap-1 ${activeTab === 'info' ? 'text-[#4ECDC4]' : 'hover:text-slate-300'}`}><Icons.LayoutGrid size={22} /> 資訊</button>
+                        <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center gap-1 ${activeTab === 'stats' ? 'text-[#FF6B6B]' : 'hover:text-slate-300'}`}><Icons.Calculator size={22} /> 統計</button>
+                    </div>
+
+                    {/* Floating Buttons */}
+                    <div className="fixed bottom-24 right-4 flex flex-col gap-3 z-50">
+                        <button onClick={handleOpenMap} className="bg-slate-800 text-slate-300 p-3 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.5)] border border-slate-600 hover:bg-slate-700 hover:text-white transition-all">
+                             <Icons.Map size={24} />
+                        </button>
+                        <button onClick={() => setIsKeyModalOpen(true)} className="bg-slate-800 text-slate-300 p-3 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.5)] border border-slate-600 hover:bg-slate-700 hover:text-white transition-all"><Icons.Settings size={24} /></button>
+                        <button onClick={() => setIsChatOpen(true)} className="bg-[#4ECDC4] text-white p-4 rounded-full shadow-[0_0_20px_rgba(78,205,196,0.4)] hover:bg-[#3dbdb4] hover:scale-105 transition-all border border-white/10"><Icons.MessageCircle size={28} /></button>
+                    </div>
+
+                    <AIChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onOpenSettings={() => { setIsChatOpen(false); setIsKeyModalOpen(true); }} />
+                    <ApiKeyModal isOpen={isKeyModalOpen} onClose={() => setIsKeyModalOpen(false)} />
+                    
+                    {/* Expense Modal */}
+                    {isModalOpen && currentEditingSpot && (
+                        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+                            <div className="glass-panel rounded-2xl p-6 w-full max-w-sm bg-[#1e293b] border border-slate-600">
+                                <h3 className="font-bold text-lg mb-4 text-slate-200">{currentEditingSpot.name}</h3>
+                                
+                                {/* 備註欄 (Note Field) */}
+                                <input 
+                                    type="text" 
+                                    value={expenseForm.note} 
+                                    onChange={e => setExpenseForm({...expenseForm, note: e.target.value})} 
+                                    className="w-full bg-slate-800 p-3 rounded-xl mb-4 text-sm text-white border border-slate-600 outline-none focus:border-[#FFCB77]" 
+                                    placeholder="備註/摘要 (例如: 商店名)" 
+                                />
+
+                                <div className="relative mb-4">
+                                    <input 
+                                        type="number" 
+                                        value={expenseForm.amount} 
+                                        onChange={e => setExpenseForm({...expenseForm, amount: e.target.value})} 
+                                        className="w-full bg-slate-800 p-3 rounded-xl text-xl font-mono text-white border border-slate-600 outline-none focus:border-[#FFCB77] pr-12" 
+                                        placeholder="金額" 
+                                        autoFocus 
+                                    />
+                                    {/* Camera Button */}
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                        <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            capture="environment" 
+                                            id="receipt-upload" 
+                                            className="hidden" 
+                                            ref={fileInputRef}
+                                            onChange={handleImageUpload}
+                                        />
+                                        <label htmlFor="receipt-upload" className={`p-2 rounded-lg cursor-pointer flex items-center justify-center transition-colors ${isAnalyzingReceipt ? 'text-[#FFCB77] animate-pulse' : 'text-slate-400 hover:text-white hover:bg-slate-700'}`}>
+                                            {isAnalyzingReceipt ? <Icons.Loader2 className="animate-spin" size={20} /> : <Icons.Camera size={20} />}
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 text-slate-400 hover:text-white">取消</button>
+                                    <button onClick={saveExpense} className="flex-1 bg-[#FFCB77] text-slate-900 rounded-xl font-bold shadow-[0_4px_0px_#d9aa5b] active:translate-y-[2px] active:shadow-none">儲存</button>
+                                </div>
+                                
+                                <div className="pt-4 border-t border-dashed border-slate-700">
+                                    <div className="text-xs font-bold text-slate-400 mb-3">歷史紀錄</div>
+                                    <div className="max-h-32 overflow-y-auto space-y-2 pr-2">
+                                        {(expenses[currentEditingSpot.id] || []).map(record => {
+                                            // Check if note contains a date string like YYYY-MM-DD or YYYY/MM/DD
+                                            const dateMatch = record.note ? record.note.match(/^(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})\s+(.*)$/) : null;
+                                            
+                                            return (
+                                                <div key={record.id} className="flex justify-between items-center text-sm bg-slate-800 p-3 rounded-xl border border-slate-600">
+                                                    <div className="flex flex-col">
+                                                        {dateMatch ? (
+                                                            <>
+                                                                <span className="text-[10px] text-slate-500">{dateMatch[1]}</span>
+                                                                <span className="font-bold text-slate-300">{dateMatch[2]}</span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="font-bold text-slate-300">{record.note || "消費"}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-mono font-bold text-slate-100">¥{record.amount}</span>
+                                                        <button onClick={() => deleteExpense(currentEditingSpot.id, record.id)} className="text-slate-400 hover:text-red-400"><Icons.X size={16} /></button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
