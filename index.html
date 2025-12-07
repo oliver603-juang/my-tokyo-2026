@@ -55,7 +55,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
-        // --- Gemini API Helper (Fixed: Use gemini-2.0-flash-exp) ---
+        // --- Gemini API Helper ---
         const generateGeminiContent = async (prompt, imageBase64 = null) => {
             const defaultKey = ""; 
             let storedKey = localStorage.getItem('gemini_api_key');
@@ -63,10 +63,8 @@
             
             if (!apiKey) throw new Error("NO_API_KEY");
 
-            // FIX: Use gemini-2.0-flash-exp which is the latest, most robust model for multimodal tasks.
-            // If this still fails, we will try to fallback to 1.5-flash-latest in logic, but let's stick to one for now.
-            //const model = 'gemini-2.0-flash-exp';
             const model = 'gemini-2.5-flash-preview-09-2025';
+            
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
             
             const parts = [{ text: prompt }];
@@ -156,7 +154,18 @@
             LocateFixed: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg>,
             Loader2: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>,
             AlertTriangle: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>,
-            Camera: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            Check: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polyline points="20 6 9 17 4 12"/></svg>,
+            Navigation2: (props) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><polygon points="12 2 19 21 12 17 5 21 12 2"/></svg>
+        };
+
+        const WeatherIcon = ({ type }) => {
+            switch (type) {
+                case 'sunny': return <Icons.Sun className="w-5 h-5 text-amber-500" />;
+                case 'snowy': return <Icons.CloudSnow className="w-5 h-5 text-slate-400" />;
+                case 'rainy': return <Icons.CloudRain className="w-5 h-5 text-blue-400" />;
+                case 'cloudy': return <Icons.Cloud className="w-5 h-5 text-stone-400" />;
+                default: return <Icons.CloudSnow className="w-5 h-5 text-stone-300" />;
+            }
         };
 
         // --- Utils ---
@@ -168,8 +177,33 @@
         }
         function deg2rad(deg) { return deg * (Math.PI/180) }
 
+        const timeToMinutes = (timeStr) => {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return hours * 60 + minutes;
+        };
+
+        const minutesToTimeStr = (minutes) => {
+            let h = Math.floor(minutes / 60);
+            let m = Math.floor(minutes % 60);
+             h = h % 24; 
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        };
+
+        // Parse "1.5 hr" or "30 min" to minutes
+        const parseStayDuration = (stayStr) => {
+             if (!stayStr || stayStr === '-') return 0;
+             if (stayStr === 'Overnight') return 0;
+             if (stayStr.includes('hr')) {
+                 return parseFloat(stayStr) * 60;
+             }
+             if (stayStr.includes('min')) {
+                 return parseInt(stayStr);
+             }
+             return 0;
+        };
+
         // --- Constants for Location & Nav ---
-        // Added lat/lon coordinates for auto-detection
         const REGION_DATA = {
           "narita": { 
             label: "千葉/成田", 
@@ -319,6 +353,7 @@
             }
         ];
         const EXCHANGE_RATE = 0.215;
+        const STAY_OPTIONS = ["30 min", "1 hr", "1.5 hr", "2 hr", "2.5 hr", "3 hr", "4 hr", "5 hr", "Overnight", "-"];
         const EXPENSE_CATEGORIES = [
             { id: 'food', label: '飲食', Icon: Icons.Coffee, color: 'text-[#E07A5F]', bgColor: 'bg-[#F2CC8F]' },
             { id: 'shopping', label: '購物', Icon: Icons.ShoppingBag, color: 'text-[#E63946]', bgColor: 'bg-[#FFC8DD]' },
@@ -329,14 +364,86 @@
             { id: 'other', label: '其他', Icon: Icons.MoreHorizontal, color: 'text-stone-600', bgColor: 'bg-stone-200' },
         ];
 
-        const WeatherIcon = ({ type }) => {
-            switch (type) {
-                case 'sunny': return <Icons.Sun className="w-5 h-5 text-amber-500" />;
-                case 'snowy': return <Icons.CloudSnow className="w-5 h-5 text-slate-400" />;
-                case 'rainy': return <Icons.CloudRain className="w-5 h-5 text-blue-400" />;
-                case 'cloudy': return <Icons.Cloud className="w-5 h-5 text-stone-400" />;
-                default: return <Icons.CloudSnow className="w-5 h-5 text-stone-300" />;
-            }
+        // --- NEW: Daily Detail Modal Component ---
+        const DailyDetailModal = ({ isOpen, onClose, dayData, allExpenses, spotTicketCounts }) => {
+            if (!isOpen || !dayData) return null;
+
+            // Flatten expenses for the day
+            const dayExpensesList = [];
+            
+            dayData.spots.forEach(spot => {
+                // 1. Manual Expenses
+                const spotExpenses = allExpenses[spot.id] || [];
+                spotExpenses.forEach(record => {
+                    const dateMatch = record.note ? record.note.match(/^(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})\s+(.*)$/) : null;
+                    dayExpensesList.push({
+                        type: 'manual',
+                        spotName: spot.name,
+                        category: record.category,
+                        amount: record.amount,
+                        note: dateMatch ? dateMatch[2] : (record.note || "消費"),
+                        date: dateMatch ? dateMatch[1] : null,
+                        id: record.id
+                    });
+                });
+
+                // 2. Ticket Expenses
+                if (spot.ticket) {
+                    const counts = spotTicketCounts[spot.id] || { adult: 2, child: 2 };
+                    const ticketCost = (spot.ticket.adult * counts.adult + spot.ticket.child * counts.child);
+                    if (ticketCost > 0) {
+                        dayExpensesList.push({
+                            type: 'ticket',
+                            spotName: spot.name,
+                            category: 'ticket',
+                            amount: ticketCost,
+                            note: `門票 (大${counts.adult} 小${counts.child})`,
+                            id: `ticket-${spot.id}`
+                        });
+                    }
+                }
+            });
+
+            return (
+                <div className="fixed inset-0 bg-stone-900/80 backdrop-blur-sm flex items-center justify-center z-[130] p-4 animate-in fade-in duration-200" onClick={onClose}>
+                    <div className="glass-panel rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[70vh] flex flex-col bg-[#0f172a] border border-slate-700" onClick={e => e.stopPropagation()}>
+                         <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+                            <div>
+                                <div className="text-xs font-bold text-slate-400 mb-1">{dayData.date}</div>
+                                <h3 className="font-black text-xl text-slate-200">{dayData.title}</h3>
+                            </div>
+                            <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-700 text-slate-400 transition-colors"><Icons.X size={20}/></button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+                            {dayExpensesList.length === 0 ? (
+                                <div className="text-center text-slate-500 py-8 flex flex-col items-center">
+                                    <Icons.Wallet size={32} className="mb-2 opacity-50"/>
+                                    <span>本日尚無花費紀錄</span>
+                                </div>
+                            ) : (
+                                dayExpensesList.map((item, idx) => (
+                                    <div key={item.id || idx} className="bg-[#1e293b] p-3 rounded-xl border border-slate-700 flex justify-between items-center">
+                                        <div>
+                                            <div className="text-xs text-[#FFCB77] font-bold mb-0.5">{item.spotName}</div>
+                                            <div className="flex flex-col">
+                                                {item.date && <span className="text-[10px] text-slate-500 block">{item.date}</span>}
+                                                <span className="text-sm font-bold text-slate-300">{item.note}</span>
+                                            </div>
+                                        </div>
+                                        <div className="font-mono font-bold text-slate-200 text-lg">¥{item.amount.toLocaleString()}</div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-slate-700 flex justify-between items-center">
+                            <span className="text-sm font-bold text-slate-400 uppercase tracking-wider">Total</span>
+                            <span className="text-2xl font-mono font-black text-[#FF6B6B]">¥{dayData.totalJpy.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
         // --- API Key Modal Component ---
@@ -389,107 +496,20 @@
             );
         };
 
-        // --- Chat AI Component ---
-        const AIChatModal = ({ isOpen, onClose, onOpenSettings }) => {
-            const [messages, setMessages] = useState([
-                { role: 'model', text: '你好！我是你的 AI 旅遊顧問。我可以幫你查交通、推薦美食，或是翻譯日文菜單。😊' }
-            ]);
-            const [input, setInput] = useState('');
-            const [isLoading, setIsLoading] = useState(false);
-            const messagesEndRef = useRef(null);
-
-            const scrollToBottom = () => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-            };
-
-            useEffect(() => {
-                scrollToBottom();
-            }, [messages]);
-
-            const handleSend = async () => {
-                if (!input.trim() || isLoading) return;
-
-                const userText = input;
-                setMessages(prev => [...prev, { role: 'user', text: userText }]);
-                setInput('');
-                setIsLoading(true);
-
-                try {
-                    const prompt = `你是一個專業、友善的東京旅遊顧問。請用繁體中文回答用戶的問題。用戶問：${userText}`;
-                    const response = await generateGeminiContent(prompt);
-                    setMessages(prev => [...prev, { role: 'model', text: response }]);
-                } catch (error) {
-                    setMessages(prev => [...prev, { role: 'model', text: `發生錯誤: ${error.message}。請檢查網路連線。` }]);
-                } finally {
-                    setIsLoading(false);
-                }
-            };
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 bg-stone-900/80 backdrop-blur-sm flex items-end md:items-center justify-center z-[110] p-4 animate-in fade-in duration-200">
-                    <div className="glass-panel md:rounded-[2rem] rounded-t-[2rem] shadow-2xl w-full max-w-md h-[80vh] flex flex-col overflow-hidden border border-slate-600 relative">
-                        <div className="bg-[#4ECDC4]/90 p-4 flex justify-between items-center text-white">
-                            <h3 className="font-black text-lg flex items-center gap-2"><Icons.Bot size={24} /> AI 旅遊顧問</h3>
-                            <div className="flex gap-2">
-                                <button onClick={onOpenSettings} className="p-1 hover:bg-white/20 rounded"><Icons.Settings size={20}/></button>
-                                <button onClick={onClose} className="p-1 hover:bg-white/20 rounded"><Icons.X size={20} /></button>
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-800">
-                            {messages.map((msg, idx) => (
-                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed shadow-sm ${msg.role === 'user' ? 'bg-[#FFCB77] text-slate-900 rounded-tr-none' : 'bg-slate-700 text-slate-200 border border-slate-600 rounded-tl-none'}`}>
-                                        <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) }} />
-                                    </div>
-                                </div>
-                            ))}
-                            {isLoading && (
-                                <div className="flex justify-start">
-                                    <div className="bg-slate-700 p-3 rounded-2xl rounded-tl-none border border-slate-600 typing-indicator space-x-1">
-                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
-                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
-                                        <span className="w-2 h-2 bg-slate-400 rounded-full inline-block"></span>
-                                    </div>
-                                </div>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </div>
-                        <div className="p-4 bg-slate-800 border-t border-slate-700 flex gap-2">
-                            <input 
-                                type="text" 
-                                value={input} 
-                                onChange={e => setInput(e.target.value)}
-                                onKeyPress={e => e.key === 'Enter' && handleSend()}
-                                placeholder="問問看：如何去淺草寺？" 
-                                className="flex-1 bg-slate-700 rounded-full px-4 py-3 outline-none focus:ring-2 focus:ring-[#4ECDC4] transition-all text-white placeholder-slate-400"
-                            />
-                            <button onClick={handleSend} disabled={isLoading} className="bg-[#4ECDC4] text-white p-3 rounded-full hover:bg-[#3dbdb4] disabled:opacity-50 transition-colors">
-                                <Icons.Send size={20} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
         // --- App Component ---
         function App() {
             const [activeTab, setActiveTab] = useState('itinerary'); 
             const [selectedDay, setSelectedDay] = useState('all'); 
             
-            // Location State
+            // ... (Location and AI state) ...
             const [userLocation, setUserLocation] = useState(null);
             const [isLocating, setIsLocating] = useState(false);
             const [locationError, setLocationError] = useState(null);
             const [infoRegion, setInfoRegion] = useState("narita");
-            
-            // AI Souvenir State
             const [aiSouvenirs, setAiSouvenirs] = useState(null);
             const [isAiSouvenirLoading, setIsAiSouvenirLoading] = useState(false);
             
-            // --- Spot Ticket Counts State (Independent for each spot) ---
+            // ... (Ticket counts state) ...
             const [spotTicketCounts, setSpotTicketCounts] = useState(() => {
                 const saved = localStorage.getItem('japan_trip_2026_spot_tickets');
                 return saved ? JSON.parse(saved) : {};
@@ -499,65 +519,18 @@
                 localStorage.setItem('japan_trip_2026_spot_tickets', JSON.stringify(spotTicketCounts));
             }, [spotTicketCounts]);
 
-            // Helper to get counts for a specific spot (defaults to 2 adults, 2 children)
-            const getTicketCounts = (spotId) => {
-                return spotTicketCounts[spotId] || { adult: 2, child: 2 };
-            };
-
+            const getTicketCounts = (spotId) => spotTicketCounts[spotId] || { adult: 2, child: 2 };
             const updateSpotTicketCount = (spotId, type, delta) => {
                 setSpotTicketCounts(prev => {
                     const current = prev[spotId] || { adult: 2, child: 2 };
                     const newValue = Math.max(0, current[type] + delta);
-                    return {
-                        ...prev,
-                        [spotId]: { ...current, [type]: newValue }
-                    };
+                    return { ...prev, [spotId]: { ...current, [type]: newValue } };
                 });
             };
 
-            const [tripData, setTripData] = useState(() => {
-                return RAW_KML_DATA.map(day => {
-                    const processedSpots = day.spots.map((spot, index) => {
-                        const startHour = 9 + (index * 2.5);
-                        const timeStr = `${Math.floor(startHour).toString().padStart(2, '0')}:${(startHour % 1 * 60).toString().padStart(2, '0') === '00' ? '00' : '30'}`;
-                        let nextStopInfo = null;
-                        if (index < day.spots.length - 1) {
-                            const nextSpot = day.spots[index + 1];
-                            const dist = getDistanceFromLatLonInKm(spot.lat, spot.lon, nextSpot.lat, nextSpot.lon);
-                            const driveMins = Math.round((dist / 40) * 60); 
-                            const walkMins = Math.round((dist / 4) * 60);
-                            
-                            nextStopInfo = {
-                                name: nextSpot.name, // 新增：下一站名稱
-                                distance: `${dist} km`,
-                                driveTime: driveMins > 60 ? `${Math.floor(driveMins/60)}hr ${driveMins%60}m` : `${driveMins}m`,
-                                walkTime: walkMins > 60 ? `${Math.floor(walkMins/60)}hr ${walkMins%60}m` : `${walkMins}m`,
-                                navLink: `https://www.google.com/maps/dir/?api=1&origin=${spot.lat},${spot.lon}&destination=${nextSpot.lat},${nextSpot.lon}&travelmode=driving`
-                            };
-                        }
-                        // Ensure ticket information from RAW_KML_DATA is passed down, default to null if not present
-                        const ticketInfo = spot.ticket || null;
-                        
-                        return { 
-                            ...spot, 
-                            id: `${day.dayId}-s${index}`, 
-                            time: timeStr, 
-                            stay: "1.5 hr", 
-                            mapcodeDisplay: spot.mapCode || "GPS", 
-                            weather: ["sunny", "cloudy"][Math.floor(Math.random()*2)], 
-                            temp: "10°C", 
-                            gmapLink: `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lon}`, 
-                            nextStop: nextStopInfo,
-                            ticket: ticketInfo 
-                        };
-                    });
-                    return { ...day, spots: processedSpots };
-                });
-            });
-
+            // ... (Other states) ...
             const [expenses, setExpenses] = useState({});
             const [isModalOpen, setIsModalOpen] = useState(false);
-            const [isChatOpen, setIsChatOpen] = useState(false);
             const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
             const [currentEditingSpot, setCurrentEditingSpot] = useState(null);
             const [expenseForm, setExpenseForm] = useState({ category: 'food', amount: '', note: '' });
@@ -568,23 +541,157 @@
             const [activeTipSpotId, setActiveTipSpotId] = useState(null);
             const [aiTips, setAiTips] = useState({});
             const [isTipLoading, setIsTipLoading] = useState(false);
+
+            // --- States for Trip Data Management ---
+            const [dayStartTimes, setDayStartTimes] = useState(() => {
+                // Initialize start times, default 09:00 for all days
+                const initial = {};
+                RAW_KML_DATA.forEach(day => initial[day.dayId] = "09:00");
+                const saved = localStorage.getItem('japan_trip_2026_start_times');
+                return saved ? JSON.parse(saved) : initial;
+            });
+
+            const [actualDepartures, setActualDepartures] = useState(() => {
+                const saved = localStorage.getItem('japan_trip_2026_departures');
+                return saved ? JSON.parse(saved) : {};
+            });
+
+            // Store 'stays' in a state object.
+            const [stays, setStays] = useState(() => {
+                 const saved = localStorage.getItem('japan_trip_2026_stays');
+                 return saved ? JSON.parse(saved) : {};
+            });
+
+            const [tripData, setTripData] = useState([]); // Initialize empty, will populate in useEffect
+
+            // --- NEW States for Daily Detail ---
+            const [isDailyDetailOpen, setIsDailyDetailOpen] = useState(false);
+            const [selectedDailyStats, setSelectedDailyStats] = useState(null);
+
             const fileInputRef = useRef(null);
 
+            // --- PERSISTENCE ---
             useEffect(() => { 
                 const saved = localStorage.getItem('japan_trip_2026_expenses'); 
                 if (saved) {
                     try {
                         const parsed = JSON.parse(saved);
-                        if (parsed && typeof parsed === 'object') {
-                             setExpenses(parsed);
-                        }
+                        if (parsed && typeof parsed === 'object') { setExpenses(parsed); }
                     } catch(e) { console.error(e); }
                 } 
             }, []);
-
             useEffect(() => { localStorage.setItem('japan_trip_2026_expenses', JSON.stringify(expenses)); }, [expenses]);
+            useEffect(() => { localStorage.setItem('japan_trip_2026_spot_tickets', JSON.stringify(spotTicketCounts)); }, [spotTicketCounts]);
+            useEffect(() => { localStorage.setItem('japan_trip_2026_start_times', JSON.stringify(dayStartTimes)); }, [dayStartTimes]);
+            useEffect(() => { localStorage.setItem('japan_trip_2026_departures', JSON.stringify(actualDepartures)); }, [actualDepartures]);
+            useEffect(() => { localStorage.setItem('japan_trip_2026_stays', JSON.stringify(stays)); }, [stays]);
 
-            // Fetch AI Souvenirs
+            // --- RECALCULATE LOGIC (Effect) ---
+             useEffect(() => {
+                setTripData(prevData => {
+                     return RAW_KML_DATA.map(day => {
+                        const startTimeStr = dayStartTimes[day.dayId] || "09:00";
+                        let currentMinutes = timeToMinutes(startTimeStr);
+
+                        const processedSpots = day.spots.map((rawSpot, index) => {
+                            const spotId = `${day.dayId}-s${index}`;
+                            
+                            // Use state 'stays' or default
+                            const stayStr = stays[spotId] || "1.5 hr";
+                            const stayMinutes = parseStayDuration(stayStr);
+
+                            const arrivalTimeStr = minutesToTimeStr(currentMinutes);
+                            
+                            let departureMinutes;
+                            let isDeparted = false;
+                            let actualDepTime = null;
+
+                            if (actualDepartures[spotId]) {
+                                actualDepTime = actualDepartures[spotId];
+                                departureMinutes = timeToMinutes(actualDepTime);
+                                isDeparted = true;
+                            } else {
+                                departureMinutes = currentMinutes + stayMinutes;
+                            }
+                            const departureTimeStr = minutesToTimeStr(departureMinutes);
+
+                            let nextStopInfo = null;
+                            let travelMinutes = 0;
+
+                            if (index < day.spots.length - 1) {
+                                const nextSpot = day.spots[index + 1];
+                                const dist = getDistanceFromLatLonInKm(rawSpot.lat, rawSpot.lon, nextSpot.lat, nextSpot.lon);
+                                const mode = transportModes[spotId] || 'car';
+                                const speed = mode === 'car' ? 40 : 4; 
+                                travelMinutes = Math.round((dist / speed) * 60);
+                                
+                                const displayDriveMins = Math.round((dist / 40) * 60); 
+                                const displayWalkMins = Math.round((dist / 4) * 60);
+
+                                nextStopInfo = {
+                                    name: nextSpot.name,
+                                    distance: `${dist} km`,
+                                    driveTime: displayDriveMins > 60 ? `${Math.floor(displayDriveMins/60)}hr ${displayDriveMins%60}m` : `${displayDriveMins}m`,
+                                    walkTime: displayWalkMins > 60 ? `${Math.floor(displayWalkMins/60)}hr ${displayWalkMins%60}m` : `${displayWalkMins}m`,
+                                    navLink: `https://www.google.com/maps/dir/?api=1&origin=${rawSpot.lat},${rawSpot.lon}&destination=${nextSpot.lat},${nextSpot.lon}&travelmode=driving`
+                                };
+                            }
+
+                            currentMinutes = departureMinutes + travelMinutes;
+
+                            return { 
+                                ...rawSpot, 
+                                id: spotId, 
+                                time: arrivalTimeStr, 
+                                stay: stayStr,
+                                departureTime: departureTimeStr,
+                                isDeparted: isDeparted,
+                                actualDepTime: actualDepTime,
+                                mapcodeDisplay: rawSpot.mapCode || "GPS", 
+                                weather: ["sunny", "cloudy"][Math.floor(Math.random()*2)], 
+                                temp: "10°C", 
+                                gmapLink: `https://www.google.com/maps/search/?api=1&query=${rawSpot.lat},${rawSpot.lon}`, 
+                                nextStop: nextStopInfo,
+                                ticket: rawSpot.ticket || null 
+                            };
+                        });
+                        return { ...day, spots: processedSpots };
+                    });
+                });
+            }, [dayStartTimes, actualDepartures, transportModes, stays]);
+
+
+            const handleTransportToggle = (spotId) => {
+                setTransportModes(prev => ({ ...prev, [spotId]: prev[spotId] === 'walk' ? 'car' : 'walk' }));
+            };
+
+            // Update the handleStayChange to use separate state
+            const handleStayChangeNew = (spotId, newStay) => {
+                setStays(prev => ({ ...prev, [spotId]: newStay }));
+            };
+
+            // Handler for Day Start Time
+            const handleDayStartTimeChange = (dayId, newTime) => {
+                setDayStartTimes(prev => ({ ...prev, [dayId]: newTime }));
+            };
+
+            // Handler for Departure Toggle
+            const handleDepartureToggle = (spotId) => {
+                setActualDepartures(prev => {
+                    const newState = { ...prev };
+                    if (newState[spotId]) {
+                        // If already departed, remove it (undo)
+                        delete newState[spotId];
+                    } else {
+                        // Set current time
+                        const now = new Date();
+                        const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                        newState[spotId] = timeStr;
+                    }
+                    return newState;
+                });
+            };
+
             const fetchAiSouvenirs = async (lat, lon) => {
                 setIsAiSouvenirLoading(true);
                 setAiSouvenirs(null);
@@ -597,7 +704,6 @@
                     ]`;
                     
                     let text = await generateGeminiContent(prompt);
-                    // Clean up markdown code blocks if present
                     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
                     const data = JSON.parse(text);
                     if (Array.isArray(data)) {
@@ -613,7 +719,6 @@
                 }
             };
 
-            // --- Geolocation Handler ---
             const handleGetLocation = () => {
                 if (window.location.protocol === 'file:') {
                    alert("⚠️ 注意：您目前是直接開啟 HTML 檔案 (file://)。\n\nGoogle Chrome 的定位功能通常要求在「安全連線 (HTTPS)」下才能運作。\n\n建議將檔案上傳至 Netlify 或使用 Local Server 開啟。");
@@ -655,26 +760,6 @@
                   },
                   options
                 );
-            };
-
-            const handleTransportToggle = (spotId) => {
-                setTransportModes(prev => ({
-                    ...prev,
-                    [spotId]: prev[spotId] === 'walk' ? 'car' : 'walk'
-                }));
-            };
-
-            const handleTimeChange = (dayId, spotId, newTime) => {
-                setTripData(prevData => prevData.map(day => {
-                    if (day.dayId !== dayId) return day;
-                    return {
-                        ...day,
-                        spots: day.spots.map(spot => {
-                            if (spot.id !== spotId) return spot;
-                            return { ...spot, time: newTime };
-                        })
-                    };
-                }));
             };
 
             const handleGetSpotTip = async (spot) => {
@@ -757,10 +842,7 @@
                         
                         if (result && (result.amount || result.amount === 0)) {
                             const cleanAmount = String(result.amount).replace(/[^0-9.]/g, '');
-                            
-                            // Format: YYYY/MM/DD HH:mm StoreName
                             const autoNote = (result.date ? result.date + " " : "") + (result.store || "");
-                            
                             setExpenseForm(prev => ({
                                 ...prev,
                                 amount: cleanAmount,
@@ -778,6 +860,11 @@
                     }
                 };
                 reader.readAsDataURL(file);
+            };
+
+            const handleOpenDailyDetail = (dayStats) => {
+                setSelectedDailyStats(dayStats);
+                setIsDailyDetailOpen(true);
             };
 
             const stats = useMemo(() => { 
@@ -833,6 +920,7 @@
 
             return (
                 <div className="min-h-screen pb-24">
+                    {/* ... (Nav, Itinerary, Info tabs remain the same) ... */}
                     <nav className="sticky top-0 z-50 bg-[#0B1121]/80 backdrop-blur-md border-b border-slate-700 shadow-sm">
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex justify-between items-center h-20">
@@ -859,8 +947,8 @@
                     </nav>
 
                     <main className="max-w-5xl mx-auto p-4 md:p-8">
-                        {/* 行程分頁 */}
                         {activeTab === 'itinerary' && (
+                            /* ... Itinerary Content (Same as before) ... */
                             <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
                                 <div className="flex flex-wrap gap-3 mb-8 justify-center sticky top-24 z-40 py-2 bg-[#0B1121]/80 backdrop-blur rounded-2xl border border-slate-700/50">
                                     <button onClick={() => setSelectedDay('all')} className={`px-5 py-2 rounded-xl text-sm font-bold border transition-all shadow-sm ${selectedDay === 'all' ? 'bg-slate-200 text-slate-900 border-slate-200' : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'}`}>全部</button>
@@ -874,6 +962,7 @@
                                 <div className="space-y-12">
                                     {filteredTripData.map((day) => (
                                         <div key={day.dayId} className="relative">
+                                            {/* ... Day Header ... */}
                                             <div className="flex items-center gap-4 mb-6">
                                                 <div className={`${day.themeColor} w-16 h-16 rounded-2xl flex flex-col items-center justify-center text-slate-900 shadow-[0_0_15px_rgba(255,255,255,0.1)] border-2 border-slate-700 -rotate-2`}>
                                                     <span className="text-xs font-bold uppercase">Day</span>
@@ -884,13 +973,12 @@
                                                     <div className="text-lg font-bold text-slate-400">{day.title}</div>
                                                 </div>
                                             </div>
-
+                                            {/* ... Spots List ... */}
                                             <div className="space-y-8 pl-4 border-l-4 border-dotted border-slate-700 ml-8">
-                                                {day.spots.map((spot) => {
+                                                {day.spots.map((spot, index) => {
                                                     const spotExpenses = expenses[spot.id] || [];
                                                     const spotTotal = spotExpenses.reduce((sum, r) => sum + (r.amount || 0), 0);
                                                     const isShowingTip = activeTipSpotId === spot.id;
-                                                    
                                                     const counts = getTicketCounts(spot.id);
                                                     const ticketTotal = spot.ticket ? (spot.ticket.adult * counts.adult + spot.ticket.child * counts.child) : 0;
                                                     const totalCostDisplay = spotTotal + ticketTotal;
@@ -902,17 +990,64 @@
                                                                 <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4">
                                                                     <div className="flex-1 w-full">
                                                                         <div className="flex items-center justify-between mb-3">
-                                                                            <div className="relative group/time">
-                                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#E07A5F] z-10"><Icons.Clock size={14}/></span>
-                                                                                <input type="time" value={spot.time} onChange={(e) => handleTimeChange(day.dayId, spot.id, e.target.value)} className="pl-7 pr-6 py-1 bg-[#334155] rounded-xl text-[#E07A5F] font-bold text-sm font-mono border border-slate-600 shadow-sm outline-none focus:border-[#E07A5F] transition-all cursor-pointer transform -rotate-1 hover:scale-105" />
-                                                                                <Icons.Edit3 size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 opacity-50 pointer-events-none" />
+                                                                            <div className="relative group/time flex items-center gap-2 bg-[#334155] rounded-xl px-3 py-1 border border-slate-600 shadow-sm text-[#E07A5F] transform -rotate-1 hover:scale-105 transition-all w-fit">
+                                                                                {/* FIRST SPOT: Editable Start Time */}
+                                                                                {index === 0 ? (
+                                                                                    <>
+                                                                                        <span className="text-sm font-bold font-mono text-white shrink-0">抵達</span>
+                                                                                        <input 
+                                                                                            type="time" 
+                                                                                            value={dayStartTimes[day.dayId] || "09:00"}
+                                                                                            onChange={(e) => handleDayStartTimeChange(day.dayId, e.target.value)}
+                                                                                            className="bg-slate-800 text-white rounded px-2 py-0.5 outline-none font-bold text-sm font-mono border border-slate-600 focus:border-[#FFCB77]" 
+                                                                                        />
+                                                                                    </>
+                                                                                ) : (
+                                                                                    /* OTHER SPOTS: Calculated Time */
+                                                                                    <>
+                                                                                        <span className="text-sm font-bold font-mono text-[#FFCB77] shrink-0">抵達</span>
+                                                                                        <span className="text-lg font-bold font-mono text-[#FFCB77]">{spot.time}</span>
+                                                                                    </>
+                                                                                )}
                                                                             </div>
+                                                                            
+                                                                            {/* DEPARTURE BUTTON */}
+                                                                            <button 
+                                                                                onClick={() => handleDepartureToggle(spot.id)}
+                                                                                className={`flex items-center gap-2 px-4 py-2 rounded-full font-bold text-xs transition-all shadow-md active:scale-95 ${
+                                                                                    spot.isDeparted 
+                                                                                    ? 'bg-[#4ECDC4]/20 text-[#4ECDC4] border border-[#4ECDC4]' 
+                                                                                    : 'bg-[#FFCB77] text-slate-900 hover:bg-[#ffbf57]'
+                                                                                }`}
+                                                                            >
+                                                                                {spot.isDeparted ? (
+                                                                                    <>
+                                                                                        <Icons.Check size={14} />
+                                                                                        已動身 {spot.actualDepTime}
+                                                                                    </>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <Icons.Navigation2 size={14} />
+                                                                                        確認動身
+                                                                                    </>
+                                                                                )}
+                                                                            </button>
                                                                         </div>
+
                                                                         <h3 className="text-2xl font-black text-slate-100 mb-2">{spot.name}</h3>
                                                                         <div className="flex items-center gap-4 text-sm font-bold text-slate-400 mb-4 bg-slate-800 w-fit px-3 py-1 rounded-lg border border-slate-700">
                                                                             <span className="flex items-center gap-1"><WeatherIcon type={spot.weather} /> {spot.temp}</span>
                                                                             <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                                                                            <span className="flex items-center gap-1">停留 {spot.stay}</span>
+                                                                            <span className="flex items-center gap-1">
+                                                                                停留 
+                                                                                <select 
+                                                                                    value={spot.stay} 
+                                                                                    onChange={(e) => handleStayChangeNew(spot.id, e.target.value)}
+                                                                                    className="bg-transparent outline-none cursor-pointer border-b border-dashed border-slate-500 hover:border-[#FFCB77] hover:text-[#FFCB77] transition-colors ml-1 appearance-none text-center"
+                                                                                >
+                                                                                    {STAY_OPTIONS.map(opt => <option key={opt} value={opt} className="bg-slate-800 text-slate-200">{opt}</option>)}
+                                                                                </select>
+                                                                            </span>
                                                                         </div>
                                                                         
                                                                         {spot.ticket && (
@@ -1021,6 +1156,11 @@
                                                                     </a>
                                                                     
                                                                     <div className="text-slate-600 mt-1"><Icons.ArrowDown size={20} /></div>
+                                                                    {spot.nextStop && (
+                                                                       <div className="text-xs text-slate-500 mt-1">
+                                                                          預計抵達下一站: <span className="text-[#4ECDC4] font-bold font-mono">{spot.departureTime}</span> 後 + {transportModes[spot.id] === 'walk' ? spot.nextStop.walkTime : spot.nextStop.driveTime}
+                                                                       </div>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1033,11 +1173,11 @@
                             </div>
                         )}
 
-                        {/* 資訊分頁 */}
+                        {/* ... (Info and Stats tabs remain the same) ... */}
                         {activeTab === 'info' && (
+                            /* ... Info Content (Same as before) ... */
                             <div className="animate-in fade-in slide-in-from-bottom-6 duration-700 space-y-8">
-                                
-                                {/* 📍 NEW: Navigation & Souvenir Guide */}
+                                {/* ... (Content same as previous version) ... */}
                                 <div className="glass-panel rounded-[2rem] p-8 shadow-lg border border-slate-700">
                                     <h3 className="text-2xl font-black text-slate-200 mb-6 flex items-center gap-2">
                                         <span className="bg-[#4ECDC4] p-2 rounded-xl text-white shadow-lg"><Icons.Navigation size={20}/></span> 
@@ -1280,7 +1420,11 @@
                                 <div className="space-y-4">
                                     <h3 className="text-xl font-black text-slate-200 ml-2 flex items-center gap-2"><Icons.Star className="text-[#FFCB77]" fill="#FFCB77" /> 每日花費</h3>
                                     {dailyStats.map((day) => (
-                                        <div key={day.dayId} className="bg-[#1e293b] p-5 rounded-2xl shadow-md border border-slate-700 flex justify-between items-center transition-transform hover:-translate-y-1 hover:border-slate-500">
+                                        <div 
+                                            key={day.dayId} 
+                                            onClick={() => handleOpenDailyDetail(day)}
+                                            className="bg-[#1e293b] p-5 rounded-2xl shadow-md border border-slate-700 flex justify-between items-center transition-transform hover:-translate-y-1 hover:border-slate-500 cursor-pointer"
+                                        >
                                             <div className="flex items-center gap-4"><div className={`${day.themeColor} px-3 py-1 rounded-lg text-xs font-black text-slate-900 shadow-sm`}>{day.date}</div><div className="font-bold text-slate-200">{day.title}</div></div>
                                             <div className="text-right"><div className="text-[10px] font-bold text-slate-500 uppercase">Total</div><div className="text-lg font-mono font-black text-[#FF6B6B]">¥ {day.totalJpy.toLocaleString()}</div></div>
                                         </div>
@@ -1303,10 +1447,13 @@
                              <Icons.Map size={24} />
                         </button>
                         <button onClick={() => setIsKeyModalOpen(true)} className="bg-slate-800 text-slate-300 p-3 rounded-full shadow-[0_4px_10px_rgba(0,0,0,0.5)] border border-slate-600 hover:bg-slate-700 hover:text-white transition-all"><Icons.Settings size={24} /></button>
-                        <button onClick={() => setIsChatOpen(true)} className="bg-[#4ECDC4] text-white p-4 rounded-full shadow-[0_0_20px_rgba(78,205,196,0.4)] hover:bg-[#3dbdb4] hover:scale-105 transition-all border border-white/10"><Icons.MessageCircle size={28} /></button>
+                        {/* Remove AI Chatbot Button as requested */}
+                        {/* <button onClick={() => setIsChatOpen(true)} className="bg-[#4ECDC4] text-white p-4 rounded-full shadow-[0_0_20px_rgba(78,205,196,0.4)] hover:bg-[#3dbdb4] hover:scale-105 transition-all border border-white/10"><Icons.MessageCircle size={28} /></button> */}
                     </div>
 
-                    <AIChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onOpenSettings={() => { setIsChatOpen(false); setIsKeyModalOpen(true); }} />
+                    {/* AIChatModal removed as requested */}
+                    {/* <AIChatModal isOpen={isChatOpen} onClose={() => setIsChatOpen(false)} onOpenSettings={() => { setIsChatOpen(false); setIsKeyModalOpen(true); }} /> */}
+                    
                     <ApiKeyModal isOpen={isKeyModalOpen} onClose={() => setIsKeyModalOpen(false)} />
                     
                     {/* Expense Modal */}
@@ -1359,7 +1506,7 @@
                                     <div className="text-xs font-bold text-slate-400 mb-3">歷史紀錄</div>
                                     <div className="max-h-32 overflow-y-auto space-y-2 pr-2">
                                         {(expenses[currentEditingSpot.id] || []).map(record => {
-                                            // Check if note contains a date string like YYYY-MM-DD or YYYY/MM/DD
+                                            // Check if note contains a date string like YYYY-MM-DD or YYYY-MM-DD
                                             const dateMatch = record.note ? record.note.match(/^(\d{4}[-/]\d{2}[-/]\d{2}\s+\d{2}:\d{2})\s+(.*)$/) : null;
                                             
                                             return (
@@ -1367,8 +1514,8 @@
                                                     <div className="flex flex-col">
                                                         {dateMatch ? (
                                                             <>
-                                                                <span className="text-[10px] text-slate-500">{dateMatch[1]}</span>
-                                                                <span className="font-bold text-slate-300">{dateMatch[2]}</span>
+                                                                <span className="text-[10px] text-slate-500 block mb-0.5">{dateMatch[1]}</span>
+                                                                <span className="font-bold text-slate-200 text-base">{dateMatch[2]}</span>
                                                             </>
                                                         ) : (
                                                             <span className="font-bold text-slate-300">{record.note || "消費"}</span>
@@ -1386,6 +1533,15 @@
                             </div>
                         </div>
                     )}
+                    
+                    {/* NEW: Daily Detail Modal */}
+                    <DailyDetailModal 
+                        isOpen={isDailyDetailOpen} 
+                        onClose={() => setIsDailyDetailOpen(false)} 
+                        dayData={selectedDailyStats} 
+                        allExpenses={expenses}
+                        spotTicketCounts={spotTicketCounts}
+                    />
                 </div>
             );
         }
