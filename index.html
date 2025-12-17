@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- 更改標題以符合新的風格 -->
     <title>旅遊計畫 | 2026寒假東京外郊親子行</title>
-    
+    <link rel="manifest" href="manifest.json">
+	<link rel="apple-touch-icon" href="icon.png">
+	<meta name="theme-color" content="#F5F5F5">
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -1667,10 +1669,12 @@
                         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                             <div className="flex justify-between items-center h-20">
                                 <div className="flex items-center gap-3">
-                                    {/* 1. 導覽列左側圖示區塊 (使用 Accent-Pink) */}
-                                    <div className="w-12 h-12 rounded-full bg-[var(--accent-pink)]/20 border-2 border-[var(--accent-pink)] flex items-center justify-center shadow-lg shrink-0">
-                                        <Icons.Pin size={24} strokeWidth={2} className="text-[var(--accent-pink-dark)] rotate-12"/>
-                                    </div>
+                                    {/* 1. Logo 圖片區塊 */}
+									<img 
+										src="icon.png" 
+										alt="App Logo" 
+										className="w-12 h-12 rounded-full object-cover bg-white border-2 border-[var(--accent-pink)] shadow-lg shrink-0"
+									/>
                                     <div className="flex flex-col justify-center">
                                         {/* 動態主標題 */}
                                         <div className="font-extrabold text-2xl tracking-tight text-[var(--color-text)] flex items-center gap-2 neon-text">{tripTitle} <Icons.Smile className="text-[var(--accent-pink-dark)]" size={20}/></div>
@@ -1832,5 +1836,15 @@
              ReactDomModule.render(<App />, container);
         }
     </script>
+	<script>
+		if ('serviceWorker' in navigator) {
+			window.addEventListener('load', () => {
+				navigator.serviceWorker.register('./sw.js')
+					.then(reg => console.log('Service Worker 註冊成功', reg))
+					.catch(err => console.log('Service Worker 註冊失敗', err));
+			});
+		}
+	</script>
 </body>
 </html>
+
