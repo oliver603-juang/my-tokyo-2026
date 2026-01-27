@@ -24,7 +24,7 @@ window.STAY_OPTIONS = [
   "-",
 ];
 
-// 2. 行程詳細資料 (由 KML 轉換)
+// 2. 行程詳細資料 (由 KML 轉換更新)
 window.RAW_KML_DATA = [
   {
     dayId: "day1",
@@ -49,19 +49,19 @@ window.RAW_KML_DATA = [
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "航空科學博物館",
-        lat: 35.7403564,
-        lon: 140.3977966,
-        desc: "Mapcode: 137 558 393*14",
-        mapCode: "137 558 393*14",
+        name: "Hard Off / Off House / Hobby Off Tomisato Inter",
+        lat: 35.7489725,
+        lon: 140.3108172,
+        desc: "Mapcode: 27 892 440*12",
+        mapCode: "27 892 440*12",
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "Hard Off Kamagaya Michinobe",
-        lat: 35.7504,
-        lon: 140.001089,
-        desc: "Mapcode: 6 585 585*37",
-        mapCode: "6 585 585*37",
+        name: "BOOKOFF SUPER BAZAAR 市川店",
+        lat: 35.7088154,
+        lon: 139.9371395,
+        desc: "Mapcode: 6 427 625*65",
+        mapCode: "6 427 625*65",
         ticket: { adult: 0, child: 0 },
       },
       {
@@ -76,7 +76,7 @@ window.RAW_KML_DATA = [
         name: "Hotel Torifito Kashiwanoha Campus",
         lat: 35.8917166,
         lon: 139.9497834,
-        desc: "Mapcode: 18 189 550*14",
+        desc: "Mapcode: 18 189 550*14。對面的lalapo 營業到晚上9:00",
         mapCode: "18 189 550*14",
         ticket: { adult: 0, child: 0 },
       },
@@ -105,11 +105,11 @@ window.RAW_KML_DATA = [
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "Hard Off .. Off House Omiya Higashi",
-        lat: 35.9056813,
-        lon: 139.6569344,
-        desc: "Mapcode: 3 544 246*31",
-        mapCode: "3 544 246*31",
+        name: "BOOKOFF SUPER BAZAAR Soka Semon Plaza Store",
+        lat: 35.8537676,
+        lon: 139.7842007,
+        desc: "Mapcode: 3 379 044*43",
+        mapCode: "3 379 044*43",
         ticket: { adult: 0, child: 0 },
       },
       {
@@ -148,7 +148,7 @@ window.RAW_KML_DATA = [
         name: "REF大宮 by Vessel Hotels",
         lat: 35.9062461,
         lon: 139.6270131,
-        desc: "Mapcode: 3 540 318*44",
+        desc: "Mapcode: 3 540 318*44。二樓除了大浴場，還有製冰機和洗衣機，高樓層若要取用冰塊，七樓也有製冰機。",
         mapCode: "3 540 318*44",
         ticket: { adult: 0, child: 0 },
       },
@@ -185,19 +185,27 @@ window.RAW_KML_DATA = [
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "鄉土之森博物館",
-        lat: 35.6567725,
-        lon: 139.4731485,
-        desc: "停車場  2 852 191*55",
-        mapCode: "2 852 191*55",
+        name: "昭和國營公園Children's Forest",
+        lat: 35.7147321,
+        lon: 139.3918945,
+        desc: "Mapcode: 5 152 342*05。有下雪時調整",
+        mapCode: "5 152 342*05",
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "Hard off Hobby off Off House",
+        name: "八王子科學館",
+        lat: 35.6649369,
+        lon: 139.3278435,
+        desc: "Mapcode: 23 294 381*78 (沒下雪時)",
+        mapCode: "23 294 381*78",
+        ticket: { adult: 0, child: 0 },
+      },
+      {
+        name: "ハードオフ多摩和田店",
         lat: 35.6434866,
         lon: 139.4294002,
-        desc: "府中店",
-        mapCode: "GPS",
+        desc: "Mapcode: 2 786 747*38",
+        mapCode: "2 786 747*38",
         ticket: { adult: 0, child: 0 },
       },
       {
@@ -220,7 +228,7 @@ window.RAW_KML_DATA = [
         name: "HOTEL COMENTO YOKOHAMA KANNAI",
         lat: 35.4411763,
         lon: 139.6359113,
-        desc: "Mapcode: 8 676 500*10",
+        desc: "Mapcode: 8 676 500*10。有洗衣機、微波爐、製冰機(3F)",
         mapCode: "8 676 500*10",
         ticket: { adult: 0, child: 0 },
       },
@@ -265,19 +273,27 @@ window.RAW_KML_DATA = [
         ticket: { adult: 0, child: 0 },
       },
       {
+        name: "Pit Design SEIYU Omori Store Parking Lot",
+        lat: 35.5884482,
+        lon: 139.7309016,
+        desc: "停車場",
+        mapCode: "GPS",
+        ticket: { adult: 0, child: 0 },
+      },
+      {
         name: "BOOKOFF SUPER BAZAAR SEIYU Omori Store",
         lat: 35.5883262,
         lon: 139.7303162,
-        desc: "Mapcode: 313 180*72",
+        desc: "Mapcode: 313 180*72。營業到10:00",
         mapCode: "313 180*72",
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "日和飯店舞濱",
-        lat: 35.6462354,
-        lon: 139.8970995,
-        desc: "Mapcode: 6 213 121*27",
-        mapCode: "6 213 121*27",
+        name: "MYSTAYS 大森精品酒店",
+        lat: 35.5904193,
+        lon: 139.7324613,
+        desc: "Mapcode: 313 398*38。車庫: 立体駐車場（38台）",
+        mapCode: "313 398*38",
         ticket: { adult: 0, child: 0 },
       },
     ],
@@ -285,23 +301,31 @@ window.RAW_KML_DATA = [
   {
     dayId: "day5",
     date: "2/3 (二)",
-    title: "船橋安徒生與返程",
+    title: "台場探索與返程",
     themeColor: "bg-[#2A9D8F]",
     spots: [
       {
-        name: "船橋安徒生公園",
-        lat: 35.760458,
-        lon: 140.0615382,
-        desc: "停車場 6 652 238*73",
-        mapCode: "6 652 238*73",
+        name: "台場Times Aomi 2",
+        lat: 35.619517,
+        lon: 139.775333,
+        desc: "停車場 Mapcode: 438 167*76",
+        mapCode: "438 167*76",
         ticket: { adult: 0, child: 0 },
       },
       {
-        name: "Hard Off / Off House / Hobby Off Tomisato Inter",
-        lat: 35.7489725,
-        lon: 140.3108172,
-        desc: "Mapcode: 27 892 440*12",
-        mapCode: "27 892 440*12",
+        name: "宗谷號巡視船",
+        lat: 35.6191165,
+        lon: 139.7736913,
+        desc: "參觀船艦",
+        mapCode: "GPS",
+        ticket: { adult: 0, child: 0 },
+      },
+      {
+        name: "BOOKOFF SUPER BAZAAR 14gou Chiba Makuhari Store",
+        lat: 35.6586631,
+        lon: 140.0502752,
+        desc: "Mapcode: 6 261 462*18",
+        mapCode: "6 261 462*18",
         ticket: { adult: 0, child: 0 },
       },
       {
@@ -316,7 +340,7 @@ window.RAW_KML_DATA = [
   },
 ];
 
-// 3. 航班與交通資訊 (已更新為 KML 中對應日期)
+// 3. 航班與交通資訊
 window.FLIGHT_INFO = {
   outbound: {
     flight: "JX802",
@@ -340,7 +364,7 @@ window.FLIGHT_INFO = {
   },
 };
 
-// 4. 住宿資訊 (從行程中提取)
+// 4. 住宿資訊 (依據 KML 資料更新)
 window.HOTEL_INFO = [
   {
     day: "1/30",
@@ -368,11 +392,11 @@ window.HOTEL_INFO = [
   },
   {
     day: "2/2",
-    name: "日和飯店舞濱",
-    location: "千葉浦安",
-    desc: "Mapcode: 6 213 121*27",
-    lat: 35.6462354,
-    lon: 139.8970995,
+    name: "MYSTAYS 大森精品酒店",
+    location: "東京大森",
+    desc: "Mapcode: 313 398*38",
+    lat: 35.5904193,
+    lon: 139.7324613,
   },
 ];
 
@@ -620,7 +644,7 @@ window.Icons = {
         ...p,
       },
       e("path", {
-        d: "m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z",
+        d: "m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L12 3Z",
       }),
       e("path", { d: "M5 3v4" }),
       e("path", { d: "M9 3v4" }),
